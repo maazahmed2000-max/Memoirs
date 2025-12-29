@@ -460,6 +460,7 @@
         let responseDelayTimer = null;
         let pendingMessage = null;
         let currentSpeech = null; // Track current speech synthesis
+        let continuousListeningEnabled = true; // Continuous listening mode (always listening)
         const RESPONSE_DELAY_MS = 2500; // Wait 2.5 seconds after user stops speaking before responding
         
         // Get person from URL parameter (for private invite links)
@@ -856,17 +857,39 @@
             // Handle speech events
             utterance.onstart = () => {
                 statusDiv.textContent = 'AI is speaking...';
+                // Stop any ongoing recognition when AI starts speaking
+                if (currentRecognition && isRecording) {
+                    currentRecognition.stop();
+                    isRecording = false;
+                    micBtn.classList.remove('recording');
+                }
             };
             
             utterance.onend = () => {
-                statusDiv.textContent = 'Tap the microphone to speak';
+                statusDiv.textContent = 'Listening...';
                 currentSpeech = null;
+                // Automatically restart listening after AI finishes speaking (if continuous listening is enabled)
+                if (!isRecording && continuousListeningEnabled) {
+                    setTimeout(() => {
+                        if (!isRecording && continuousListeningEnabled) {
+                            startSpeechRecognition();
+                        }
+                    }, 500); // Small delay to ensure speech is fully stopped
+                }
             };
             
             utterance.onerror = (event) => {
                 console.error('Speech synthesis error:', event);
-                statusDiv.textContent = 'Tap the microphone to speak';
+                statusDiv.textContent = 'Listening...';
                 currentSpeech = null;
+                // Restart listening on error (if continuous listening is enabled)
+                if (!isRecording && continuousListeningEnabled) {
+                    setTimeout(() => {
+                        if (!isRecording && continuousListeningEnabled) {
+                            startSpeechRecognition();
+                        }
+                    }, 500);
+                }
             };
             
             // Store reference and speak
@@ -890,11 +913,16 @@
                     return;
                 }
 
+            // Don't start if already recording
+            if (isRecording && currentRecognition) {
+                return;
+            }
+            
             const recognition = new SpeechRecognition();
             // Use Hindi recognition for Urdu on iOS (iOS doesn't support Urdu directly)
             // The transcript will be converted from Devanagari to Urdu Nastaliq script
             recognition.lang = currentLanguage === 'ur-PK' ? 'hi-IN' : currentLanguage;
-            recognition.continuous = false;
+            recognition.continuous = true; // Continuous listening mode
             recognition.interimResults = true;
 
             recognition.onstart = () => {
@@ -952,6 +980,7 @@
             recognition.onend = () => {
                 isRecording = false;
                 micBtn.classList.remove('recording');
+                statusDiv.classList.remove('recording');
                 
                 // If there's a pending message and no timer, send it immediately
                 // (user manually stopped recording)
@@ -962,8 +991,19 @@
                         pendingMessage = null;
                     }, 500);
                 } else if (!pendingMessage) {
-                    statusDiv.textContent = 'Tap the microphone to speak';
-                    statusDiv.classList.remove('recording');
+                    // Auto-restart listening if continuous listening is enabled and AI is not speaking
+                    if (continuousListeningEnabled && !currentSpeech) {
+                        statusDiv.textContent = 'Listening...';
+                        setTimeout(() => {
+                            if (!isRecording && !currentSpeech && continuousListeningEnabled) {
+                                startSpeechRecognition();
+                            }
+                        }, 1000); // Wait a bit before restarting
+                    } else if (!continuousListeningEnabled) {
+                        statusDiv.textContent = 'Tap microphone to start listening';
+                    } else {
+                        statusDiv.textContent = 'AI is speaking...';
+                    }
                 }
             };
 
@@ -971,7 +1011,24 @@
                 console.error('Recognition error:', event.error);
                 isRecording = false;
                 micBtn.classList.remove('recording');
-                statusDiv.textContent = 'Error: ' + event.error;
+                statusDiv.classList.remove('recording');
+                
+                // Handle different error types
+                if (event.error === 'no-speech' || event.error === 'audio-capture') {
+                    // These are common and we should retry
+                    if (continuousListeningEnabled && !currentSpeech) {
+                        statusDiv.textContent = 'Listening...';
+                        setTimeout(() => {
+                            if (!isRecording && continuousListeningEnabled) {
+                                startSpeechRecognition();
+                            }
+                        }, 2000);
+                    } else {
+                        statusDiv.textContent = 'Tap microphone to start listening';
+                    }
+                } else {
+                    statusDiv.textContent = 'Error: ' + event.error + ' - Tap microphone to retry';
+                }
             };
 
             recognition.start();
@@ -1002,10 +1059,18 @@
             }
         });
 
+        // Microphone button - toggle continuous listening on/off
         micBtn.addEventListener('click', () => {
             if (isRecording && currentRecognition) {
+                // Stop recording and disable continuous listening
                 currentRecognition.stop();
-                    } else {
+                continuousListeningEnabled = false;
+                isRecording = false;
+                micBtn.classList.remove('recording');
+                statusDiv.textContent = 'Tap microphone to start listening';
+            } else {
+                // Start recording and enable continuous listening
+                continuousListeningEnabled = true;
                 startSpeechRecognition();
             }
         });
@@ -1067,6 +1132,13 @@
                 url.searchParams.set('name', currentPersonName);
                 window.history.replaceState({}, '', url);
             }
+            
+            // Start continuous listening automatically after page loads
+            setTimeout(() => {
+                if (!isRecording && continuousListeningEnabled) {
+                    startSpeechRecognition();
+                }
+            }, 1500); // Wait a bit after page load
         } else {
             // Show prompt if no person set
             currentPersonDiv.textContent = 'Please enter a name to start';
