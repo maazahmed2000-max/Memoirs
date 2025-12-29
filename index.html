@@ -21,39 +21,60 @@
         }
 
         .container {
-            max-width: 900px;
+            max-width: 100%;
             margin: 0 auto;
             background: white;
-            border-radius: 20px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            border-radius: 0;
+            box-shadow: none;
             display: flex;
             flex-direction: column;
-            height: calc(100vh - 40px);
+            height: 100vh;
             overflow: hidden;
         }
 
         .header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 30px;
+            padding: 15px 20px;
             text-align: center;
+            flex-shrink: 0;
+            position: relative;
         }
 
         .header h1 {
-            font-size: 2rem;
-            margin-bottom: 10px;
+            font-size: 1.3rem;
+            margin-bottom: 5px;
         }
 
         .header p {
             opacity: 0.9;
-            font-size: 1rem;
+            font-size: 0.85rem;
+            display: none; /* Hide description to save space */
+        }
+
+        .header-toggle {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+
+        .header-toggle:hover {
+            background: rgba(255, 255, 255, 0.3);
         }
 
         .chat-container {
             flex: 1;
             overflow-y: auto;
-            padding: 20px;
+            padding: 15px;
             background: #f9f9f9;
+            min-height: 0; /* Important for flex scrolling */
         }
 
         .message {
@@ -104,13 +125,14 @@
         }
 
         .input-area {
-            padding: 30px 20px;
+            padding: 15px;
             background: white;
             border-top: 2px solid #eee;
             display: flex;
             flex-direction: column;
-            gap: 15px;
+            gap: 10px;
             align-items: center;
+            flex-shrink: 0;
         }
 
         /* Main microphone button - prominent and centered */
@@ -221,13 +243,23 @@
         }
 
         .person-selector {
-            padding: 15px 20px;
+            padding: 10px 15px;
             background: #fff3cd;
             border-bottom: 2px solid #ffc107;
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 8px;
             align-items: center;
+            flex-shrink: 0;
+            transition: max-height 0.3s ease, padding 0.3s ease, opacity 0.3s ease;
+            overflow: hidden;
+        }
+
+        .person-selector.collapsed {
+            max-height: 0;
+            padding: 0;
+            border-bottom: none;
+            opacity: 0;
         }
 
         .person-selector label {
@@ -270,13 +302,22 @@
         }
 
         .language-selector {
-            padding: 15px 20px;
+            padding: 8px 15px;
             background: #f5f5f5;
             display: flex;
-            gap: 10px;
+            gap: 8px;
             justify-content: center;
             border-bottom: 2px solid #eee;
-            }
+            flex-shrink: 0;
+            transition: max-height 0.3s ease, padding 0.3s ease;
+            overflow: hidden;
+        }
+
+        .language-selector.collapsed {
+            max-height: 0;
+            padding: 0;
+            border-bottom: none;
+        }
 
             .lang-btn {
             padding: 10px 20px;
@@ -295,14 +336,44 @@
 
         .status {
             text-align: center;
-            padding: 10px;
-                font-size: 0.9rem;
+            padding: 5px 10px;
+            font-size: 0.8rem;
             color: #666;
+            flex-shrink: 0;
+            min-height: 25px;
         }
 
         .status.recording {
             color: #f44336;
             font-weight: bold;
+        }
+
+        .controls-toggle {
+            position: fixed;
+            bottom: 80px;
+            right: 15px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            font-size: 1.2rem;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.3s;
+        }
+
+        .controls-toggle:hover {
+            transform: scale(1.1);
+        }
+
+        .controls-toggle.active {
+            background: #764ba2;
         }
 
         @media (max-width: 600px) {
@@ -312,11 +383,22 @@
             }
 
             .header h1 {
-                font-size: 1.5rem;
+                font-size: 1.1rem;
             }
 
             .message-bubble {
                 max-width: 85%;
+            }
+
+            .chat-container {
+                padding: 10px;
+            }
+
+            .controls-toggle {
+                bottom: 70px;
+                right: 10px;
+                width: 45px;
+                height: 45px;
             }
         }
     </style>
@@ -324,8 +406,9 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>💬 Memory Conversations with Maaz</h1>
-            <p>Share your stories, memories, and experiences for Maaz to know you better while he stays busy. I'm here to listen and remember for him.</p>
+            <button class="header-toggle" id="toggleControls" onclick="toggleControls()" title="Toggle controls">⚙️</button>
+            <h1>💬 Memory Conversations</h1>
+            <p style="display: none;">Share your stories, memories, and experiences. I'm here to listen and remember.</p>
     </div>
     
         <div class="person-selector" id="personSelector">
@@ -351,6 +434,8 @@
         </div>
 
         <div class="status" id="status">Tap the microphone to speak</div>
+
+        <button class="controls-toggle" id="controlsToggle" onclick="toggleControls()" title="Show/Hide controls">⚙️</button>
 
         <div class="input-area">
             <button class="btn-mic" id="micBtn" title="Tap to speak">🎤</button>
@@ -447,7 +532,7 @@
             // Hide person selector if person is set (cleaner UI)
             const personSelector = document.getElementById('personSelector');
             if (personSelector) {
-                personSelector.style.display = 'none';
+                personSelector.classList.add('collapsed');
             }
             
             // Clear chat and load this person's history
@@ -541,6 +626,20 @@
                     })
                 });
 
+                // Check if response is ok before parsing JSON
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    let errorMessage = `Server error (${response.status})`;
+                    try {
+                        const errorJson = JSON.parse(errorText);
+                        errorMessage = errorJson.error || errorJson.details || errorMessage;
+                    } catch (e) {
+                        // Not JSON, use the text or status
+                        errorMessage = errorText.substring(0, 100) || errorMessage;
+                    }
+                    throw new Error(errorMessage);
+                }
+
                 const result = await response.json();
 
                 // Remove typing indicator
@@ -561,13 +660,25 @@
                     
                     // Reset status (will be updated by speakText when it finishes)
                                 } else {
-                    addMessage('Sorry, I encountered an error. Please try again.', 'ai');
+                    addMessage(`Sorry, I encountered an error: ${result.error || 'Unknown error'}. Please try again.`, 'ai');
                     statusDiv.textContent = 'Tap the microphone to speak';
                 }
             } catch (error) {
                 console.error('Error sending message:', error);
+                console.error('Worker URL:', WORKER_URL);
+                console.error('Error details:', error.message);
                 removeMessage(typingId);
-                addMessage('Connection error. Please check your internet and try again.', 'ai');
+                
+                let errorMsg = 'Connection error. ';
+                if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+                    errorMsg += `Cannot connect to ${WORKER_URL}. Please check:\n1. Your internet connection\n2. The worker is deployed\n3. The worker URL is correct`;
+                } else if (error.message.includes('CORS')) {
+                    errorMsg += 'CORS error. The worker may not be allowing requests from this origin.';
+                } else {
+                    errorMsg += error.message || 'Please check your internet and try again.';
+                }
+                
+                addMessage(errorMsg, 'ai');
                 statusDiv.textContent = 'Tap the microphone to speak';
             }
         }
@@ -826,7 +937,11 @@
             // Hide person selector (they're already identified)
             const personSelector = document.getElementById('personSelector');
             if (personSelector) {
-                personSelector.style.display = 'none';
+                personSelector.classList.add('collapsed');
+            }
+            // Auto-collapse controls when person is set
+            if (typeof toggleControls === 'function' && controlsVisible) {
+                toggleControls();
             }
             
             // Update URL to include person parameter (for bookmarking)
