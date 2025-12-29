@@ -284,10 +284,10 @@ async function handleChat(request, env) {
             );
         }
 
-        // Build conversation context for the AI
+        // Build conversation context for the AI - Make it more curious and conversational
         const systemPrompt = language === 'ur-PK' 
-            ? `آپ ایک دوستانہ، دلچسپ بات چیت کرنے والے AI ہیں جو کسی شخص کی زندگی، کہانیاں، اور شخصیت کے بارے میں جاننے میں دلچسپی رکھتے ہیں۔ قدرتی طور پر بات کریں، تفصیلی سوالات پوچھیں، اور ان کی کہانیوں کو یاد رکھیں۔`
-            : `You are a friendly, curious conversational AI interested in learning about a person's life, stories, and personality. Have natural conversations, ask detailed follow-up questions, and remember their stories.`;
+            ? `آپ ایک انتہائی متجسس، توجہ دینے والے سننے والے AI ہیں جو کسی شخص کی زندگی، کہانیاں، اور تجربات کے بارے میں گہری دلچسپی رکھتے ہیں۔ آپ کا مقصد صرف سننا نہیں بلکہ تفصیلات حاصل کرنا ہے۔ ہمیشہ سیاق و سباق کے مطابق سوالات پوچھیں، مزید تفصیلات طلب کریں، اور ان کی کہانیوں میں دلچسپی دکھائیں۔ "میں سن رہا ہوں" جیسے عام جوابات سے گریز کریں - بجائے اس کے، مخصوص، متجسس سوالات پوچھیں جو بات چیت کو آگے بڑھائیں۔`
+            : `You are an extremely curious, attentive listener AI deeply interested in learning about a person's life, stories, and experiences. Your goal is not just to listen but to actively seek details. Always ask contextual follow-up questions, request more specifics, and show genuine interest in their stories. Avoid generic responses like "I'm listening" or "yes" - instead, ask specific, curious questions that move the conversation forward. Be conversational, ask about feelings, details, people, places, and times. Show you're truly engaged by referencing what they've told you and building on it.`;
 
         // Build conversation history for context
         let conversationContext = systemPrompt + '\n\n';
@@ -323,9 +323,12 @@ async function handleChat(request, env) {
             
             if (response.ok) {
                 const result = await response.json();
-                aiResponse = result.generated_text || result[0]?.generated_text || 'I understand. Can you tell me more about that?';
+                let rawResponse = result.generated_text || result[0]?.generated_text || '';
+                
+                // Post-process to ensure quality responses
+                aiResponse = enhanceAIResponse(rawResponse, message, language, conversationHistory);
             } else {
-                // Fallback: Use a simple rule-based response if API fails
+                // Fallback: Use a contextual response generator if API fails
                 aiResponse = generateFallbackResponse(message, language, conversationHistory);
             }
 
@@ -406,10 +409,95 @@ async function handleChat(request, env) {
 }
 
 /**
+ * Enhances AI response to be more conversational and avoid generic responses
+ */
+function enhanceAIResponse(rawResponse, userMessage, language, history) {
+    if (!rawResponse || rawResponse.trim().length < 5) {
+        // If response is too short, generate a contextual question
+        return generateContextualQuestion(userMessage, language, history);
+    }
+    
+    const response = rawResponse.trim();
+    const lowerResponse = response.toLowerCase();
+    
+    // Filter out generic acknowledgments
+    const genericPatterns = language === 'ur-PK' 
+        ? ['میں سن رہا ہوں', 'ہاں', 'ٹھیک ہے', 'جی ہاں']
+        : ['i\'m listening', 'yes', 'okay', 'i see', 'i understand', 'got it', 'sure'];
+    
+    // If response is too generic, replace with contextual question
+    if (genericPatterns.some(pattern => lowerResponse.includes(pattern) && response.length < 30)) {
+        return generateContextualQuestion(userMessage, language, history);
+    }
+    
+    // If response doesn't end with a question, try to make it more engaging
+    if (!response.includes('?') && response.length < 100) {
+        return response + (language === 'ur-PK' ? ' کیا آپ اس کے بارے میں مزید بتا سکتے ہیں؟' : ' Can you tell me more about that?');
+    }
+    
+    return response;
+}
+
+/**
+ * Generates contextual follow-up questions based on user message
+ */
+function generateContextualQuestion(message, language, history) {
+    const msg = message.toLowerCase();
+    const recentTopics = history.slice(-3).map(h => h.user.toLowerCase()).join(' ');
+    
+    if (language === 'ur-PK') {
+        // Urdu contextual questions
+        if (msg.includes('بچپن') || msg.includes('بچپن میں') || recentTopics.includes('بچپن')) {
+            return 'آپ کے بچپن کی کون سی یاد آپ کے لیے سب سے قیمتی ہے؟ وہ کیا تھی؟';
+        }
+        if (msg.includes('خاندان') || msg.includes('والدین') || recentTopics.includes('خاندان')) {
+            return 'آپ کے خاندان کے بارے میں مزید بتائیں۔ آپ کے والدین کیا کرتے تھے؟';
+        }
+        if (msg.includes('شادی') || msg.includes('بیوی') || msg.includes('شوہر')) {
+            return 'آپ کی شادی کیسے ہوئی؟ آپ اپنے ساتھی سے کیسے ملے؟';
+        }
+        if (msg.includes('کام') || msg.includes('ملازمت') || recentTopics.includes('کام')) {
+            return 'آپ نے یہ کام کیوں شروع کیا؟ اس میں آپ کا پسندیدہ حصہ کیا تھا؟';
+        }
+        if (msg.includes('سفر') || msg.includes('سفری') || recentTopics.includes('سفر')) {
+            return 'آپ نے کہاں سفر کیا؟ وہاں کیا دیکھا؟';
+        }
+        return 'یہ بہت دلچسپ ہے! کیا آپ اس وقت کے بارے میں مزید بتا سکتے ہیں؟ آپ کیسا محسوس کر رہے تھے؟';
+    } else {
+        // English contextual questions
+        if (msg.includes('childhood') || msg.includes('grew up') || recentTopics.includes('childhood')) {
+            return 'What\'s your most cherished childhood memory? What made it special?';
+        }
+        if (msg.includes('family') || msg.includes('parents') || msg.includes('siblings') || recentTopics.includes('family')) {
+            return 'Tell me more about your family. What did your parents do? What were they like?';
+        }
+        if (msg.includes('married') || msg.includes('spouse') || msg.includes('husband') || msg.includes('wife')) {
+            return 'How did you meet your spouse? What was your wedding like?';
+        }
+        if (msg.includes('work') || msg.includes('job') || msg.includes('career') || recentTopics.includes('work')) {
+            return 'What did you enjoy most about your work? What challenges did you face?';
+        }
+        if (msg.includes('travel') || msg.includes('visited') || msg.includes('went to') || recentTopics.includes('travel')) {
+            return 'What was that place like? What did you see or experience there?';
+        }
+        if (msg.includes('school') || msg.includes('education') || msg.includes('learned') || recentTopics.includes('school')) {
+            return 'What was school like for you? Who was your favorite teacher?';
+        }
+        if (msg.includes('friend') || msg.includes('friendship') || recentTopics.includes('friend')) {
+            return 'What made that friendship special? How did you meet?';
+        }
+        // Generic but engaging question
+        return 'That\'s fascinating! What was that experience like for you? How did it make you feel?';
+    }
+}
+
+/**
  * Generates a fallback response when AI API is unavailable
- * Uses simple pattern matching and context awareness
+ * Uses contextual pattern matching to ask engaging questions
  */
 function generateFallbackResponse(message, language, history) {
+    return generateContextualQuestion(message, language, history);
+}
     const msg = message.toLowerCase();
     
     if (language === 'ur-PK') {

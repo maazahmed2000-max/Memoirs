@@ -276,9 +276,9 @@
             gap: 10px;
             justify-content: center;
             border-bottom: 2px solid #eee;
-        }
+            }
 
-        .lang-btn {
+            .lang-btn {
             padding: 10px 20px;
             border: 2px solid #667eea;
             background: white;
@@ -296,7 +296,7 @@
         .status {
             text-align: center;
             padding: 10px;
-            font-size: 0.9rem;
+                font-size: 0.9rem;
             color: #666;
         }
 
@@ -326,8 +326,8 @@
         <div class="header">
             <h1>💬 Memory Conversations</h1>
             <p>Share your stories, memories, and experiences. I'm here to listen and remember.</p>
-        </div>
-
+    </div>
+    
         <div class="person-selector" id="personSelector">
             <label for="personInput">👤 Who is sharing their memories?</label>
             <div class="person-input-group">
@@ -358,7 +358,7 @@
             <div class="input-group hidden" id="inputGroup">
                 <input type="text" id="messageInput" placeholder="Type your message..." />
                 <button class="btn btn-send" id="sendBtn">Send</button>
-            </div>
+        </div>
         </div>
     </div>
 
@@ -550,14 +550,16 @@
                     // Add AI response
                     addMessage(result.response, 'ai');
                     
+                    // Speak the AI response using text-to-speech
+                    speakText(result.response);
+                    
                     // Update conversation history
                     conversationHistory.push({
                         user: message,
                         ai: result.response
                     });
                     
-                    // Reset status
-                    statusDiv.textContent = 'Tap the microphone to speak';
+                    // Reset status (will be updated by speakText when it finishes)
                 } else {
                     addMessage('Sorry, I encountered an error. Please try again.', 'ai');
                     statusDiv.textContent = 'Tap the microphone to speak';
@@ -593,11 +595,80 @@
             if (messageDiv) messageDiv.remove();
         }
 
+        // Text-to-Speech function for AI responses
+        function speakText(text) {
+            // Stop any current speech
+            if (currentSpeech) {
+                window.speechSynthesis.cancel();
+            }
+            
+            // Check if speech synthesis is available
+            if (!('speechSynthesis' in window)) {
+                console.log('Text-to-speech not supported');
+                return;
+            }
+            
+            // Create speech utterance
+            const utterance = new SpeechSynthesisUtterance(text);
+            
+            // Set language based on current language
+            utterance.lang = currentLanguage === 'ur-PK' ? 'ur-PK' : 'en-US';
+            
+            // Set voice properties for natural speech
+            utterance.rate = 0.95; // Slightly slower for clarity
+            utterance.pitch = 1.0;
+            utterance.volume = 1.0;
+            
+            // Try to use a natural-sounding voice
+            const voices = window.speechSynthesis.getVoices();
+            if (currentLanguage === 'ur-PK') {
+                // Try to find Urdu voice, fallback to default
+                const urduVoice = voices.find(v => v.lang.startsWith('ur') || v.lang.startsWith('hi'));
+                if (urduVoice) utterance.voice = urduVoice;
+            } else {
+                // Try to find a natural English voice
+                const englishVoice = voices.find(v => 
+                    v.lang.startsWith('en') && 
+                    (v.name.includes('Natural') || v.name.includes('Premium') || v.name.includes('Enhanced'))
+                ) || voices.find(v => v.lang.startsWith('en-US'));
+                if (englishVoice) utterance.voice = englishVoice;
+            }
+            
+            // Handle speech events
+            utterance.onstart = () => {
+                statusDiv.textContent = 'AI is speaking...';
+            };
+            
+            utterance.onend = () => {
+                statusDiv.textContent = 'Tap the microphone to speak';
+                currentSpeech = null;
+            };
+            
+            utterance.onerror = (event) => {
+                console.error('Speech synthesis error:', event);
+                statusDiv.textContent = 'Tap the microphone to speak';
+                currentSpeech = null;
+            };
+            
+            // Store reference and speak
+            currentSpeech = utterance;
+            
+            // Load voices if not already loaded (some browsers need this)
+            if (voices.length === 0) {
+                window.speechSynthesis.onvoiceschanged = () => {
+                    speakText(text); // Retry with loaded voices
+                };
+                return;
+            }
+            
+            window.speechSynthesis.speak(utterance);
+        }
+
         // Speech Recognition
         function startSpeechRecognition() {
             if (!SpeechRecognition) {
                 alert('Speech recognition not supported in your browser.');
-                return;
+                        return;
             }
 
             const recognition = new SpeechRecognition();
@@ -606,6 +677,12 @@
             recognition.interimResults = true;
 
             recognition.onstart = () => {
+                // Stop any ongoing speech when user starts speaking
+                if (currentSpeech) {
+                    window.speechSynthesis.cancel();
+                    currentSpeech = null;
+                }
+                
                 isRecording = true;
                 micBtn.classList.add('recording');
                 statusDiv.textContent = 'Listening... Speak now';
@@ -701,7 +778,7 @@
         micBtn.addEventListener('click', () => {
             if (isRecording && currentRecognition) {
                 currentRecognition.stop();
-            } else {
+                    } else {
                 startSpeechRecognition();
             }
         });
