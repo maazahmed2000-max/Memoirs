@@ -1,5 +1,5 @@
 {
-  "name": "grandma-memory-worker",
+  "name": "memoirs",
   "main": "./worker.js",
   "compatibility_date": "2025-12-29",
   "d1_databases": [
