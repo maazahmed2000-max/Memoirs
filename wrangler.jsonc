@@ -1,0 +1,12 @@
+{
+  "name": "grandma-memory-worker",
+  "main": "./worker.js",
+  "compatibility_date": "2025-12-29",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "grandma-memory-db",
+      "database_id": "db772d7b-b42b-43fa-918e-642e7c3e26b6"
+    }
+  ]
+}
