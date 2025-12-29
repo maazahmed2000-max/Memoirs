@@ -399,10 +399,19 @@
 
             // Test the secret by trying to fetch data
             fetch(`${WORKER_URL}/admin/data?secret=${encodeURIComponent(secret)}`)
-                .then(response => response.json())
                 .then(response => {
                     if (!response.ok) {
-                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                        return response.text().then(text => {
+                            try {
+                                const json = JSON.parse(text);
+                                throw new Error(json.error || json.details || `HTTP ${response.status}: ${response.statusText}`);
+                            } catch (e) {
+                                if (e instanceof Error && e.message.includes('HTTP')) {
+                                    throw e;
+                                }
+                                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                            }
+                        });
                     }
                     return response.json();
                 })
@@ -420,7 +429,11 @@
                     }
                 })
                 .catch(error => {
-                    errorDiv.textContent = `Error: ${error.message}. Check your worker URL and that the ADMIN_SECRET is set in Cloudflare.`;
+                    let errorMsg = error.message || 'Unknown error';
+                    if (errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError')) {
+                        errorMsg = `Cannot connect to ${WORKER_URL}. Check that the worker is deployed and the URL is correct.`;
+                    }
+                    errorDiv.textContent = `Error: ${errorMsg}`;
                     errorDiv.classList.remove('hidden');
                     console.error('Login error:', error);
                 });
