@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speech to Text - Simple Voice Recorder</title>
+    <style>
+        /* Reset and base styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: #333;
+        }
+
+        /* Main container */
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 800px;
+            width: 100%;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Title */
+        h1 {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 30px;
+            color: #667eea;
+        }
+
+        /* Language toggle section */
+        .language-section {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f5f5f5;
+            border-radius: 10px;
+        }
+
+        .language-section label {
+            font-size: 1.3rem;
+            font-weight: bold;
+            display: block;
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .language-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        /* Language button */
+        .lang-btn {
+            padding: 15px 30px;
+            font-size: 1.2rem;
+            border: 3px solid #667eea;
+            background: white;
+            color: #667eea;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            min-width: 150px;
+        }
+
+        .lang-btn:hover {
+            background: #f0f0f0;
+            transform: scale(1.05);
+        }
+
+        .lang-btn.active {
+            background: #667eea;
+            color: white;
+        }
+
+        /* Control buttons section */
+        .controls {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        /* Main action buttons - large for elderly users */
+        .btn {
+            padding: 25px 50px;
+            font-size: 1.8rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 15px;
+            cursor: pointer;
+            transition: all 0.3s;
+            min-width: 200px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Start button */
+        .btn-start {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .btn-start:hover:not(:disabled) {
+            background: #45a049;
+        }
+
+        /* Stop button */
+        .btn-stop {
+            background: #f44336;
+            color: white;
+        }
+
+        .btn-stop:hover:not(:disabled) {
+            background: #da190b;
+        }
+
+        /* Status indicator */
+        .status {
+            text-align: center;
+            font-size: 1.3rem;
+            margin-bottom: 20px;
+            padding: 15px;
+            border-radius: 10px;
+            font-weight: bold;
+        }
+
+        .status.idle {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .status.listening {
+            background: #c8e6c9;
+            color: #2e7d32;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        /* Transcription display area */
+        .transcription-area {
+            background: #f9f9f9;
+            border: 3px solid #ddd;
+            border-radius: 10px;
+            padding: 25px;
+            min-height: 200px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-size: 1.3rem;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+
+        .transcription-area:empty::before {
+            content: "Your transcribed text will appear here...";
+            color: #999;
+            font-style: italic;
+        }
+
+        /* Error message styling */
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-size: 1.2rem;
+            border: 2px solid #ef5350;
+            text-align: center;
+        }
+
+        /* Responsive design for mobile */
+        @media (max-width: 600px) {
+            h1 {
+                font-size: 2rem;
+            }
+
+            .container {
+                padding: 20px;
+            }
+
+            .btn {
+                font-size: 1.5rem;
+                padding: 20px 40px;
+                min-width: 100%;
+            }
+
+            .lang-btn {
+                min-width: 120px;
+                font-size: 1rem;
+                padding: 12px 20px;
+            }
+
+            .transcription-area {
+                font-size: 1.1rem;
+                min-height: 150px;
+            }
+        }
+
+        /* Accessibility: Focus indicators */
+        .btn:focus,
+        .lang-btn:focus {
+            outline: 3px solid #ff9800;
+            outline-offset: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 Speech to Text</h1>
+
+        <!-- Language Selection Section -->
+        <div class="language-section">
+            <label for="language-select">Select Language:</label>
+            <div class="language-buttons">
+                <button class="lang-btn active" id="lang-en" aria-label="Select English language">
+                    English (en-US)
+                </button>
+                <button class="lang-btn" id="lang-ur" aria-label="Select Urdu language">
+                    Urdu (ur-PK)
+                </button>
+            </div>
+        </div>
+
+        <!-- Status Display -->
+        <div class="status idle" id="status" role="status" aria-live="polite">
+            Ready to start
+        </div>
+
+        <!-- Error Display Area (hidden by default) -->
+        <div id="error-message" class="error" style="display: none;" role="alert"></div>
+
+        <!-- Control Buttons -->
+        <div class="controls">
+            <button class="btn btn-start" id="start-btn" aria-label="Start speech recognition">
+                🎤 Start Talking
+            </button>
+            <button class="btn btn-stop" id="stop-btn" disabled aria-label="Stop speech recognition">
+                ⏹ Stop
+            </button>
+        </div>
+
+        <!-- Transcription Display Area -->
+        <div class="transcription-area" id="transcription" role="log" aria-live="polite" aria-label="Transcribed text">
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // Speech Recognition Setup
+        // ============================================
+        
+        // Check for browser support and get the SpeechRecognition API
+        // Different browsers use different prefixes
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        
+        // Variables to store recognition instance and current language
+        let recognition = null;
+        let currentLanguage = 'en-US'; // Default language
+        
+        // DOM element references
+        const startBtn = document.getElementById('start-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        const transcriptionDiv = document.getElementById('transcription');
+        const statusDiv = document.getElementById('status');
+        const errorDiv = document.getElementById('error-message');
+        const langEnBtn = document.getElementById('lang-en');
+        const langUrBtn = document.getElementById('lang-ur');
+
+        // ============================================
+        // Browser Support Check
+        // ============================================
+        
+        /**
+         * Checks if the browser supports speech recognition
+         * Displays an error message if not supported
+         */
+        function checkBrowserSupport() {
+            if (!SpeechRecognition) {
+                showError(
+                    'Speech recognition is not supported in your browser. ' +
+                    'Please use Chrome, Edge, or another Chromium-based browser.'
+                );
+                // Disable buttons if not supported
+                startBtn.disabled = true;
+                stopBtn.disabled = true;
+                return false;
+            }
+            return true;
+        }
+
+        // ============================================
+        // Error Handling
+        // ============================================
+        
+        /**
+         * Displays an error message to the user
+         * @param {string} message - The error message to display
+         */
+        function showError(message) {
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            statusDiv.textContent = 'Error occurred';
+            statusDiv.className = 'status idle';
+        }
+
+        /**
+         * Hides the error message
+         */
+        function hideError() {
+            errorDiv.style.display = 'none';
+        }
+
+        // ============================================
+        // Speech Recognition Initialization
+        // ============================================
+        
+        /**
+         * Initializes the SpeechRecognition object with current settings
+         */
+        function initializeRecognition() {
+            if (!SpeechRecognition) {
+                return null;
+            }
+
+            // Create new recognition instance
+            recognition = new SpeechRecognition();
+            
+            // Set recognition properties
+            recognition.continuous = true; // Keep listening until stopped
+            recognition.interimResults = true; // Show results as user speaks
+            recognition.lang = currentLanguage; // Set the selected language
+
+            // ============================================
+            // Event Handlers for Speech Recognition
+            // ============================================
+            
+            /**
+             * Fired when recognition starts
+             */
+            recognition.onstart = function() {
+                statusDiv.textContent = 'Listening... Speak now!';
+                statusDiv.className = 'status listening';
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                hideError();
+            };
+
+            /**
+             * Fired when recognition produces a result
+             * @param {SpeechRecognitionEvent} event - The recognition event
+             */
+            recognition.onresult = function(event) {
+                let interimTranscript = '';
+                let finalTranscript = '';
+
+                // Process all results from the event
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const transcript = event.results[i][0].transcript;
+                    
+                    // Check if this is a final or interim result
+                    if (event.results[i].isFinal) {
+                        finalTranscript += transcript + ' ';
+                    } else {
+                        interimTranscript += transcript;
+                    }
+                }
+
+                // Update the transcription display
+                // Show both final and interim results
+                transcriptionDiv.textContent = finalTranscript + interimTranscript;
+                
+                // Auto-scroll to bottom if content is long
+                transcriptionDiv.scrollTop = transcriptionDiv.scrollHeight;
+            };
+
+            /**
+             * Fired when recognition encounters an error
+             * @param {SpeechRecognitionErrorEvent} event - The error event
+             */
+            recognition.onerror = function(event) {
+                let errorMessage = 'An error occurred: ';
+                
+                // Provide user-friendly error messages
+                switch(event.error) {
+                    case 'no-speech':
+                        errorMessage = 'No speech detected. Please try again.';
+                        break;
+                    case 'audio-capture':
+                        errorMessage = 'Microphone not found. Please check your microphone.';
+                        break;
+                    case 'not-allowed':
+                        errorMessage = 'Microphone permission denied. Please allow microphone access.';
+                        break;
+                    case 'network':
+                        errorMessage = 'Network error. Please check your internet connection.';
+                        break;
+                    case 'aborted':
+                        // User stopped, not really an error
+                        return;
+                    default:
+                        errorMessage += event.error;
+                }
+                
+                showError(errorMessage);
+                resetUI();
+            };
+
+            /**
+             * Fired when recognition ends (naturally or manually)
+             */
+            recognition.onend = function() {
+                resetUI();
+            };
+
+            return recognition;
+        }
+
+        // ============================================
+        // UI State Management
+        // ============================================
+        
+        /**
+         * Resets the UI to the initial state
+         */
+        function resetUI() {
+            statusDiv.textContent = 'Ready to start';
+            statusDiv.className = 'status idle';
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+        }
+
+        // ============================================
+        // Button Event Handlers
+        // ============================================
+        
+        /**
+         * Starts speech recognition
+         */
+        function startRecognition() {
+            hideError();
+            
+            // Initialize recognition if not already done
+            if (!recognition) {
+                if (!checkBrowserSupport()) {
+                    return;
+                }
+                initializeRecognition();
+            } else {
+                // Update language if changed
+                recognition.lang = currentLanguage;
+            }
+
+            // Check if recognition object was created successfully
+            if (!recognition) {
+                showError('Failed to initialize speech recognition.');
+                return;
+            }
+
+            try {
+                recognition.start();
+            } catch (error) {
+                // Handle case where recognition is already running
+                if (error.name === 'InvalidStateError') {
+                    showError('Recognition is already running.');
+                } else {
+                    showError('Failed to start recognition: ' + error.message);
+                }
+            }
+        }
+
+        /**
+         * Stops speech recognition
+         */
+        function stopRecognition() {
+            if (recognition) {
+                recognition.stop();
+            }
+            resetUI();
+        }
+
+        // ============================================
+        // Language Toggle
+        // ============================================
+        
+        /**
+         * Changes the recognition language
+         * @param {string} lang - Language code (e.g., 'en-US' or 'ur-PK')
+         */
+        function changeLanguage(lang) {
+            currentLanguage = lang;
+            
+            // Update button states
+            if (lang === 'en-US') {
+                langEnBtn.classList.add('active');
+                langUrBtn.classList.remove('active');
+            } else {
+                langUrBtn.classList.add('active');
+                langEnBtn.classList.remove('active');
+            }
+
+            // Update recognition language if it's already initialized
+            if (recognition) {
+                recognition.lang = currentLanguage;
+            }
+
+            // Clear transcription when language changes
+            transcriptionDiv.textContent = '';
+            hideError();
+        }
+
+        // ============================================
+        // Event Listeners
+        // ============================================
+        
+        // Start button click handler
+        startBtn.addEventListener('click', startRecognition);
+        
+        // Stop button click handler
+        stopBtn.addEventListener('click', stopRecognition);
+        
+        // Language button handlers
+        langEnBtn.addEventListener('click', function() {
+            changeLanguage('en-US');
+        });
+        
+        langUrBtn.addEventListener('click', function() {
+            changeLanguage('ur-PK');
+        });
+
+        // ============================================
+        // Keyboard Accessibility
+        // ============================================
+        
+        // Allow Enter key to trigger buttons
+        startBtn.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                startRecognition();
+            }
+        });
+
+        stopBtn.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                stopRecognition();
+            }
+        });
+
+        // ============================================
+        // Initialization on Page Load
+        // ============================================
+        
+        // Check browser support when page loads
+        window.addEventListener('load', function() {
+            checkBrowserSupport();
+        });
+    </script>
+</body>
+</html>
