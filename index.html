@@ -24,10 +24,25 @@
             color: #333;
         }
 
+        /* Under Construction Banner */
+        .construction-banner {
+            background: #ff9800;
+            color: #fff;
+            padding: 15px 20px;
+            text-align: center;
+            font-size: 1.1rem;
+            font-weight: bold;
+            width: 100%;
+            max-width: 800px;
+            border-radius: 10px 10px 0 0;
+            margin-bottom: 0;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        }
+
         /* Main container */
         .container {
             background: white;
-            border-radius: 20px;
+            border-radius: 0 0 20px 20px;
             padding: 40px;
             max-width: 800px;
             width: 100%;
@@ -89,6 +104,40 @@
             color: white;
         }
 
+        /* Disabled language button state (when recording is active) */
+        .lang-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            background: #e0e0e0;
+            color: #999;
+            border-color: #ccc;
+        }
+
+        .lang-btn:disabled:hover {
+            background: #e0e0e0;
+            transform: none;
+        }
+
+        /* iOS Safari hint styling */
+        .ios-hint {
+            background: #e3f2fd;
+            color: #1565c0;
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-size: 1rem;
+            line-height: 1.6;
+            border: 2px solid #90caf9;
+            text-align: left;
+        }
+
+        .ios-hint strong {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 1.1rem;
+        }
+
         /* Control buttons section */
         .controls {
             display: flex;
@@ -109,6 +158,8 @@
             transition: all 0.3s;
             min-width: 200px;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            white-space: normal; /* Allow text to wrap for bilingual labels */
+            line-height: 1.3; /* Better spacing for wrapped text */
         }
 
         .btn:hover {
@@ -164,12 +215,20 @@
         .status.listening {
             background: #c8e6c9;
             color: #2e7d32;
+            border: 3px solid #4caf50;
             animation: pulse 1.5s infinite;
+            font-size: 1.4rem; /* Slightly larger when recording */
         }
 
         @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
+            0%, 100% { 
+                opacity: 1;
+                box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7);
+            }
+            50% { 
+                opacity: 0.9;
+                box-shadow: 0 0 0 10px rgba(76, 175, 80, 0);
+            }
         }
 
         /* Transcription display area */
@@ -202,12 +261,19 @@
             font-size: 1.2rem;
             border: 2px solid #ef5350;
             text-align: center;
+            white-space: pre-line; /* Preserve line breaks in error messages */
+            word-wrap: break-word; /* Break long words if needed */
         }
 
         /* Responsive design for mobile */
         @media (max-width: 600px) {
             h1 {
                 font-size: 2rem;
+            }
+
+            .construction-banner {
+                font-size: 0.9rem;
+                padding: 12px 15px;
             }
 
             .container {
@@ -230,6 +296,15 @@
                 font-size: 1.1rem;
                 min-height: 150px;
             }
+
+            .ios-hint {
+                font-size: 0.9rem;
+                padding: 12px 15px;
+            }
+
+            .status.listening {
+                font-size: 1.2rem;
+            }
         }
 
         /* Accessibility: Focus indicators */
@@ -241,6 +316,11 @@
     </style>
 </head>
 <body>
+    <!-- Under Construction Banner -->
+    <div class="construction-banner">
+        ⚠️ This app is under construction and not finalized | یہ ایپ ابھی زیر تعمیر ہے اور حتمی نہیں ہے
+    </div>
+    
     <div class="container">
         <h1>🎤 Speech to Text</h1>
 
@@ -257,6 +337,14 @@
             </div>
         </div>
 
+        <!-- iOS Safari Permission Hint (shown only on iOS Safari) -->
+        <div id="ios-hint" class="ios-hint" style="display: none;" role="note" aria-label="iOS Safari instructions">
+            <strong>📱 iOS Safari Tips:</strong><br>
+            • Tap "Start Talking" to begin recording<br>
+            • Allow microphone permission when prompted<br>
+            • If microphone doesn't work, refresh the page
+        </div>
+
         <!-- Status Display -->
         <div class="status idle" id="status" role="status" aria-live="polite">
             Ready to start
@@ -268,10 +356,10 @@
         <!-- Control Buttons -->
         <div class="controls">
             <button class="btn btn-start" id="start-btn" aria-label="Start speech recognition">
-                🎤 Start Talking
+                🎤 Start Talking / بات شروع کریں
             </button>
             <button class="btn btn-stop" id="stop-btn" disabled aria-label="Stop speech recognition">
-                ⏹ Stop
+                ⏹ Stop / روکیں
             </button>
         </div>
 
@@ -289,8 +377,17 @@
         // Different browsers use different prefixes
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         
-        // Variables to store recognition instance and current language
-        let recognition = null;
+        // IMPORTANT FOR iOS SAFARI:
+        // We do NOT store the recognition object globally. Instead, we create a NEW
+        // SpeechRecognition object every time the user presses "Start Talking".
+        // This is required because iOS Safari has strict requirements:
+        // 1. A recognition object can only be started once per instance
+        // 2. The language must be set BEFORE calling start() - changing it after creation
+        //    but before start() may not work reliably on iOS
+        // 3. Reusing a recognition object that has ended will fail on iOS
+        // By creating a fresh object each time, we ensure iOS Safari compatibility.
+        
+        // Variable to store current language (not the recognition object)
         let currentLanguage = 'en-US'; // Default language
         
         // DOM element references
@@ -301,6 +398,7 @@
         const errorDiv = document.getElementById('error-message');
         const langEnBtn = document.getElementById('lang-en');
         const langUrBtn = document.getElementById('lang-ur');
+        const iosHintDiv = document.getElementById('ios-hint');
 
         // ============================================
         // Browser Support Check
@@ -329,21 +427,79 @@
         // ============================================
         
         /**
-         * Displays an error message to the user
-         * @param {string} message - The error message to display
+         * Detects if the user is on Safari (including iOS Safari)
+         * @returns {boolean} True if Safari, false otherwise
          */
-        function showError(message) {
-            errorDiv.textContent = message;
-            errorDiv.style.display = 'block';
-            statusDiv.textContent = 'Error occurred';
-            statusDiv.className = 'status idle';
+        function isSafari() {
+            const userAgent = navigator.userAgent;
+            return /^((?!chrome|android).)*safari/i.test(userAgent) ||
+                   /iPad|iPhone|iPod/.test(userAgent);
+        }
+
+        /**
+         * Detects if the user is on iOS Safari specifically
+         * @returns {boolean} True if iOS Safari, false otherwise
+         */
+        function isIOSSafari() {
+            const userAgent = navigator.userAgent;
+            // Check for iOS devices (iPhone, iPad, iPod) and Safari
+            return (/iPad|iPhone|iPod/.test(userAgent) && 
+                    /Safari/.test(userAgent) && 
+                    !/CriOS|FxiOS|OPiOS/.test(userAgent)); // Exclude Chrome, Firefox, Opera on iOS
+        }
+        
+        /**
+         * Displays an error message to the user with error code and Safari advice
+         * @param {string} message - The error message to display
+         * @param {string} errorCode - The specific error code (e.g., 'service-not-allowed', 'not-allowed')
+         */
+        function showError(message, errorCode) {
+            let fullMessage = message;
+            
+            // Always show the error code if provided
+            if (errorCode) {
+                fullMessage += `\n\nError Code: ${errorCode}`;
+            }
+            
+            // Add Safari-specific advice for certain errors
+            if (isSafari() && errorCode) {
+                const safariErrors = ['service-not-allowed', 'not-allowed', 'aborted', 'network'];
+                if (safariErrors.includes(errorCode)) {
+                    fullMessage += '\n\n💡 Safari Tip: If this error persists, try refreshing the page and allowing microphone access when prompted.';
+                }
+            } else if (isSafari()) {
+                // General Safari advice if no specific error code
+                fullMessage += '\n\n💡 Safari Tip: If you continue to experience issues, try refreshing the page.';
+            }
+            
+            // Add contact information for Maaz in English and Urdu
+            fullMessage += '\n\n📧 Contact for Support:';
+            fullMessage += '\nEnglish: If you encounter any errors, please contact Maaz for assistance.';
+            fullMessage += '\nUrdu: اگر کوئی خرابی آئے تو براہ کرم معاذ سے رابطہ کریں۔';
+            
+            // Safely update error display - wrap in try-catch to prevent crashes
+            try {
+                errorDiv.textContent = fullMessage;
+                errorDiv.style.display = 'block';
+                statusDiv.textContent = 'Error occurred';
+                statusDiv.className = 'status idle';
+            } catch (e) {
+                // Fallback: use console if DOM update fails
+                console.error('Error displaying error message:', e);
+                console.error('Original error:', message, errorCode);
+            }
         }
 
         /**
          * Hides the error message
          */
         function hideError() {
-            errorDiv.style.display = 'none';
+            try {
+                errorDiv.style.display = 'none';
+            } catch (e) {
+                // Silently fail if DOM is not available
+                console.warn('Could not hide error message:', e);
+            }
         }
 
         // ============================================
@@ -351,20 +507,53 @@
         // ============================================
         
         /**
-         * Initializes the SpeechRecognition object with current settings
+         * Creates and configures a NEW SpeechRecognition object
+         * IMPORTANT: This function creates a fresh object each time it's called.
+         * This is required for iOS Safari compatibility - recognition objects
+         * cannot be reused after they end.
+         * Enhanced with error handling to prevent crashes.
+         * 
+         * @returns {SpeechRecognition|null} A new recognition object or null if not supported
          */
-        function initializeRecognition() {
-            if (!SpeechRecognition) {
-                return null;
-            }
+        function createRecognitionObject() {
+            try {
+                if (!SpeechRecognition) {
+                    return null;
+                }
 
-            // Create new recognition instance
-            recognition = new SpeechRecognition();
-            
-            // Set recognition properties
-            recognition.continuous = true; // Keep listening until stopped
-            recognition.interimResults = true; // Show results as user speaks
-            recognition.lang = currentLanguage; // Set the selected language
+                // CRITICAL FOR iOS: Create a NEW recognition instance every time
+                // iOS Safari does not allow reusing recognition objects
+                let recognition;
+                try {
+                    recognition = new SpeechRecognition();
+                } catch (error) {
+                    console.error('Error creating SpeechRecognition object:', error);
+                    showError('Failed to create speech recognition. Please refresh the page.', 'creation-error');
+                    return null;
+                }
+                
+                // CRITICAL FOR iOS: Set language BEFORE calling start()
+                // The language must be set during object creation, not after
+                try {
+                    recognition.lang = currentLanguage;
+                } catch (error) {
+                    console.warn('Error setting language, using default:', error);
+                    // Try to continue with default language
+                    try {
+                        recognition.lang = 'en-US';
+                    } catch (e) {
+                        console.error('Error setting default language:', e);
+                    }
+                }
+                
+                // Set recognition properties with error handling
+                try {
+                    recognition.continuous = true; // Keep listening until stopped
+                    recognition.interimResults = true; // Show results as user speaks
+                } catch (error) {
+                    console.warn('Error setting recognition properties:', error);
+                    // Continue anyway - these may have defaults
+                }
 
             // ============================================
             // Event Handlers for Speech Recognition
@@ -372,97 +561,251 @@
             
             /**
              * Fired when recognition starts
+             * Enhanced with error handling to prevent crashes
              */
             recognition.onstart = function() {
-                statusDiv.textContent = 'Listening... Speak now!';
-                statusDiv.className = 'status listening';
-                startBtn.disabled = true;
-                stopBtn.disabled = false;
-                hideError();
+                try {
+                    // Clear status message and show active recording state
+                    statusDiv.textContent = '🔴 RECORDING - Speak now!';
+                    statusDiv.className = 'status listening';
+                    startBtn.disabled = true;
+                    stopBtn.disabled = false;
+                    hideError();
+                    // CRITICAL: Disable language toggle during recording
+                    // Changing language mid-session causes Safari failures
+                    disableLanguageToggle();
+                } catch (error) {
+                    console.error('Error in onstart handler:', error);
+                    // Try to at least update status and disable toggle
+                    try {
+                        statusDiv.textContent = '🔴 RECORDING';
+                        disableLanguageToggle();
+                    } catch (e) {
+                        console.error('Critical error updating status:', e);
+                    }
+                }
             };
 
             /**
              * Fired when recognition produces a result
+             * Enhanced with error handling to prevent crashes
              * @param {SpeechRecognitionEvent} event - The recognition event
              */
             recognition.onresult = function(event) {
-                let interimTranscript = '';
-                let finalTranscript = '';
+                try {
+                    let interimTranscript = '';
+                    let finalTranscript = '';
 
-                // Process all results from the event
-                for (let i = event.resultIndex; i < event.results.length; i++) {
-                    const transcript = event.results[i][0].transcript;
-                    
-                    // Check if this is a final or interim result
-                    if (event.results[i].isFinal) {
-                        finalTranscript += transcript + ' ';
-                    } else {
-                        interimTranscript += transcript;
+                    // Safely process all results from the event
+                    try {
+                        if (!event || !event.results) {
+                            console.warn('Invalid recognition event:', event);
+                            return;
+                        }
+
+                        const startIndex = event.resultIndex || 0;
+                        const results = event.results || [];
+
+                        for (let i = startIndex; i < results.length; i++) {
+                            try {
+                                const result = results[i];
+                                if (!result || !result[0]) {
+                                    continue; // Skip invalid results
+                                }
+                                
+                                const transcript = result[0].transcript || '';
+                                
+                                // Check if this is a final or interim result
+                                if (result.isFinal) {
+                                    finalTranscript += transcript + ' ';
+                                } else {
+                                    interimTranscript += transcript;
+                                }
+                            } catch (e) {
+                                // Skip individual result if it's malformed
+                                console.warn('Error processing result at index', i, ':', e);
+                                continue;
+                            }
+                        }
+                    } catch (e) {
+                        console.error('Error processing recognition results:', e);
+                        // Don't update transcription if we can't process results
+                        return;
                     }
-                }
 
-                // Update the transcription display
-                // Show both final and interim results
-                transcriptionDiv.textContent = finalTranscript + interimTranscript;
-                
-                // Auto-scroll to bottom if content is long
-                transcriptionDiv.scrollTop = transcriptionDiv.scrollHeight;
+                    // Safely update the transcription display
+                    try {
+                        transcriptionDiv.textContent = finalTranscript + interimTranscript;
+                        
+                        // Auto-scroll to bottom if content is long
+                        transcriptionDiv.scrollTop = transcriptionDiv.scrollHeight;
+                    } catch (e) {
+                        console.error('Error updating transcription display:', e);
+                    }
+                } catch (error) {
+                    // Catch-all to prevent crashes
+                    console.error('Unexpected error in onresult handler:', error);
+                    // Don't show error to user for result processing issues
+                    // as it's not critical - just log it
+                }
             };
 
             /**
              * Fired when recognition encounters an error
+             * Enhanced error handling with specific error codes and Safari advice
              * @param {SpeechRecognitionErrorEvent} event - The error event
              */
             recognition.onerror = function(event) {
-                let errorMessage = 'An error occurred: ';
+                // Safely extract error code - prevent crashes if event is malformed
+                let errorCode = 'unknown';
+                let errorMessage = 'An error occurred.';
                 
-                // Provide user-friendly error messages
-                switch(event.error) {
-                    case 'no-speech':
-                        errorMessage = 'No speech detected. Please try again.';
-                        break;
-                    case 'audio-capture':
-                        errorMessage = 'Microphone not found. Please check your microphone.';
-                        break;
-                    case 'not-allowed':
-                        errorMessage = 'Microphone permission denied. Please allow microphone access.';
-                        break;
-                    case 'network':
-                        errorMessage = 'Network error. Please check your internet connection.';
-                        break;
-                    case 'aborted':
-                        // User stopped, not really an error
-                        return;
-                    default:
-                        errorMessage += event.error;
+                try {
+                    errorCode = event.error || 'unknown';
+                } catch (e) {
+                    console.error('Error extracting error code:', e);
+                    errorCode = 'unknown';
                 }
                 
-                showError(errorMessage);
-                resetUI();
+                // Provide user-friendly error messages with specific error codes
+                switch(errorCode) {
+                    case 'no-speech':
+                        errorMessage = 'No speech detected. Please speak clearly and try again.';
+                        break;
+                    case 'audio-capture':
+                        errorMessage = 'Microphone not found. Please check that your microphone is connected and working.';
+                        break;
+                    case 'not-allowed':
+                        errorMessage = 'Microphone permission denied. Please allow microphone access in your browser settings and try again.';
+                        break;
+                    case 'service-not-allowed':
+                        // Common on iOS Safari when language is not supported or service unavailable
+                        errorMessage = 'Speech recognition service not available. This may happen if the selected language is not supported on your device.';
+                        if (isSafari()) {
+                            errorMessage += ' Try switching to English (en-US) or refresh the page.';
+                        }
+                        break;
+                    case 'network':
+                        errorMessage = 'Network error. Please check your internet connection and try again.';
+                        break;
+                    case 'bad-grammar':
+                        errorMessage = 'Grammar error in speech recognition configuration.';
+                        break;
+                    case 'language-not-supported':
+                        errorMessage = 'The selected language is not supported. Please try a different language.';
+                        break;
+                    case 'aborted':
+                        // User stopped manually - not really an error, don't show error message
+                        return;
+                    default:
+                        errorMessage = `An unexpected error occurred: ${errorCode}`;
+                }
+                
+                // Display error with code and Safari advice
+                showError(errorMessage, errorCode);
+                
+                // Safely reset UI - wrap in try-catch to prevent crashes
+                try {
+                    resetUI();
+                } catch (e) {
+                    console.error('Error resetting UI:', e);
+                    // Try to at least clear the recognition reference
+                    try {
+                        currentRecognition = null;
+                    } catch (e2) {
+                        console.error('Critical error clearing recognition:', e2);
+                    }
+                }
             };
 
             /**
              * Fired when recognition ends (naturally or manually)
+             * Enhanced with error handling to prevent crashes
              */
             recognition.onend = function() {
-                resetUI();
+                try {
+                    resetUI();
+                } catch (error) {
+                    console.error('Error in onend handler:', error);
+                    // Try to at least clear the recognition reference
+                    try {
+                        currentRecognition = null;
+                    } catch (e) {
+                        console.error('Critical error clearing recognition in onend:', e);
+                    }
+                }
             };
 
             return recognition;
+            } catch (error) {
+                // Catch-all for any unexpected errors during object creation
+                console.error('Unexpected error in createRecognitionObject:', error);
+                showError('Failed to create speech recognition object. Please refresh the page and try again.', 'unexpected-creation-error');
+                return null;
+            }
         }
 
         // ============================================
         // UI State Management
         // ============================================
         
+        // Store the current recognition instance (only while active)
+        // This is set to null when recognition ends or is stopped
+        // IMPORTANT: We create a NEW object each time startRecognition() is called
+        let currentRecognition = null;
+        
+        /**
+         * Disables language toggle buttons
+         * Called when recognition starts to prevent language changes mid-session
+         * This is critical for iOS Safari compatibility
+         */
+        function disableLanguageToggle() {
+            try {
+                langEnBtn.disabled = true;
+                langUrBtn.disabled = true;
+            } catch (error) {
+                console.error('Error disabling language toggle:', error);
+            }
+        }
+
+        /**
+         * Enables language toggle buttons
+         * Called when recognition ends or errors occur
+         */
+        function enableLanguageToggle() {
+            try {
+                langEnBtn.disabled = false;
+                langUrBtn.disabled = false;
+            } catch (error) {
+                console.error('Error enabling language toggle:', error);
+            }
+        }
+        
         /**
          * Resets the UI to the initial state
+         * Enhanced with error handling to prevent crashes
          */
         function resetUI() {
-            statusDiv.textContent = 'Ready to start';
-            statusDiv.className = 'status idle';
-            startBtn.disabled = false;
-            stopBtn.disabled = true;
+            try {
+                statusDiv.textContent = 'Ready to start';
+                statusDiv.className = 'status idle';
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                // Re-enable language toggle when recognition ends
+                enableLanguageToggle();
+                // Clear the recognition reference when UI resets
+                // This ensures we create a new object next time
+                currentRecognition = null;
+            } catch (error) {
+                // If UI reset fails, at least try to clear the recognition reference
+                console.error('Error resetting UI:', error);
+                try {
+                    currentRecognition = null;
+                    enableLanguageToggle(); // Try to re-enable toggle even on error
+                } catch (e) {
+                    console.error('Critical error clearing recognition reference:', e);
+                }
+            }
         }
 
         // ============================================
@@ -471,47 +814,131 @@
         
         /**
          * Starts speech recognition
+         * 
+         * CRITICAL FOR iOS SAFARI:
+         * - Creates a NEW SpeechRecognition object every time (never reuses)
+         * - Sets the language BEFORE calling start() (required for iOS)
+         * - Calls start() immediately in the click handler (no async/delay)
+         * 
+         * This approach is required because iOS Safari has strict limitations:
+         * 1. Recognition objects can only be started once per instance
+         * 2. Language must be set during object creation, not modified after
+         * 3. Objects cannot be reused after they end - must create fresh ones
          */
         function startRecognition() {
-            hideError();
-            
-            // Initialize recognition if not already done
-            if (!recognition) {
+            // Wrap entire function in try-catch to prevent crashes
+            try {
+                hideError();
+                
+                // Check browser support first
                 if (!checkBrowserSupport()) {
                     return;
                 }
-                initializeRecognition();
-            } else {
-                // Update language if changed
-                recognition.lang = currentLanguage;
-            }
 
-            // Check if recognition object was created successfully
-            if (!recognition) {
-                showError('Failed to initialize speech recognition.');
-                return;
-            }
+                // CRITICAL FOR iOS: Create a NEW recognition object every time
+                // Never reuse an existing object - iOS Safari will fail if we try
+                let recognition;
+                try {
+                    recognition = createRecognitionObject();
+                } catch (e) {
+                    console.error('Error creating recognition object:', e);
+                    showError('Failed to create speech recognition object. Please refresh the page and try again.', 'initialization-error');
+                    if (isSafari()) {
+                        showError('Failed to create speech recognition object. Please refresh the page and try again.', 'initialization-error');
+                    }
+                    return;
+                }
 
-            try {
-                recognition.start();
+                // Check if recognition object was created successfully
+                if (!recognition) {
+                    showError('Failed to initialize speech recognition. The browser may not support this feature.', 'initialization-failed');
+                    return;
+                }
+
+                // Store reference so stopRecognition() can access it
+                currentRecognition = recognition;
+
+                // CRITICAL FOR iOS: Call start() immediately, synchronously
+                // No async/await, no setTimeout, no delays
+                // iOS Safari requires start() to be called directly in the event handler
+                try {
+                    recognition.start();
+                } catch (error) {
+                    // Safely extract error information
+                    let errorName = 'UnknownError';
+                    let errorMessage = 'Unknown error';
+                    
+                    try {
+                        errorName = error.name || 'UnknownError';
+                        errorMessage = error.message || 'Unknown error occurred';
+                    } catch (e) {
+                        console.error('Error extracting error details:', e);
+                    }
+                    
+                    // Handle specific error types with error codes
+                    if (errorName === 'InvalidStateError') {
+                        showError('Speech recognition is already running or was not properly stopped. Please wait a moment and try again.', 'invalid-state');
+                    } else if (errorName === 'NotAllowedError' || errorName === 'SecurityError') {
+                        showError('Microphone access denied. Please allow microphone permissions and refresh the page.', 'not-allowed');
+                    } else {
+                        showError(`Failed to start recognition: ${errorMessage}`, errorName.toLowerCase().replace('error', ''));
+                    }
+                    
+                    // Clear reference on error
+                    currentRecognition = null;
+                    
+                    // Safely reset UI
+                    try {
+                        resetUI();
+                    } catch (e) {
+                        console.error('Error resetting UI after start error:', e);
+                    }
+                }
             } catch (error) {
-                // Handle case where recognition is already running
-                if (error.name === 'InvalidStateError') {
-                    showError('Recognition is already running.');
-                } else {
-                    showError('Failed to start recognition: ' + error.message);
+                // Catch-all for any unexpected errors - prevent page crash
+                console.error('Unexpected error in startRecognition:', error);
+                showError('An unexpected error occurred. Please refresh the page and try again.', 'unexpected-error');
+                
+                // Try to reset state
+                try {
+                    currentRecognition = null;
+                    resetUI();
+                } catch (e) {
+                    console.error('Critical error during error recovery:', e);
                 }
             }
         }
 
         /**
          * Stops speech recognition
+         * After stopping, the recognition object is cleared and cannot be reused
+         * Enhanced with error handling to prevent crashes
          */
         function stopRecognition() {
-            if (recognition) {
-                recognition.stop();
+            try {
+                if (currentRecognition) {
+                    try {
+                        currentRecognition.stop();
+                    } catch (error) {
+                        // If stop() fails, log but don't crash
+                        console.warn('Error stopping recognition:', error);
+                        // Still try to reset UI
+                    }
+                    // Note: currentRecognition will be set to null in resetUI()
+                    // which is called by the onend event handler
+                }
+                resetUI();
+            } catch (error) {
+                // Catch-all to prevent crashes
+                console.error('Unexpected error in stopRecognition:', error);
+                // Try to at least clear the reference
+                try {
+                    currentRecognition = null;
+                    resetUI();
+                } catch (e) {
+                    console.error('Critical error during stop recovery:', e);
+                }
             }
-            resetUI();
         }
 
         // ============================================
@@ -520,6 +947,9 @@
         
         /**
          * Changes the recognition language
+         * Note: The language is applied when creating a NEW recognition object,
+         * not by modifying an existing one. This ensures iOS Safari compatibility.
+         * 
          * @param {string} lang - Language code (e.g., 'en-US' or 'ur-PK')
          */
         function changeLanguage(lang) {
@@ -534,10 +964,10 @@
                 langEnBtn.classList.remove('active');
             }
 
-            // Update recognition language if it's already initialized
-            if (recognition) {
-                recognition.lang = currentLanguage;
-            }
+            // Note: We don't update an existing recognition object's language
+            // because we create a NEW object each time startRecognition() is called.
+            // The language will be applied when the next recognition object is created.
+            // This approach is required for iOS Safari compatibility.
 
             // Clear transcription when language changes
             transcriptionDiv.textContent = '';
@@ -589,6 +1019,15 @@
         // Check browser support when page loads
         window.addEventListener('load', function() {
             checkBrowserSupport();
+            
+            // Show iOS Safari hint if on iOS Safari
+            if (isIOSSafari() && iosHintDiv) {
+                try {
+                    iosHintDiv.style.display = 'block';
+                } catch (e) {
+                    console.warn('Could not show iOS hint:', e);
+                }
+            }
         });
     </script>
 </body>
