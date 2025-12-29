@@ -780,30 +780,77 @@
             // Set language based on current language
             utterance.lang = currentLanguage === 'ur-PK' ? 'ur-PK' : 'en-US';
             
-            // Set voice properties for natural speech
-            utterance.rate = 0.95; // Slightly slower for clarity
-            utterance.pitch = 1.0;
+            // Set voice properties for natural, human-like speech
+            utterance.rate = 0.92; // Slightly slower for natural conversation pace
+            utterance.pitch = 1.05; // Slightly higher pitch for more warmth and human-like quality
             utterance.volume = 1.0;
             
-            // Try to use a natural-sounding voice
+            // Get available voices
             const voices = window.speechSynthesis.getVoices();
+            
             if (currentLanguage === 'ur-PK') {
-                // Try to find Urdu voice first, then Hindi as fallback
-                const urduVoice = voices.find(v => v.lang.startsWith('ur'));
-                if (urduVoice) {
-                    utterance.voice = urduVoice;
-                } else {
-                    // Fallback to Hindi voice if Urdu not available
-                    const hindiVoice = voices.find(v => v.lang.startsWith('hi'));
-                    if (hindiVoice) utterance.voice = hindiVoice;
+                // Priority order for Urdu voices (most natural first)
+                const urduVoicePriorities = [
+                    // Look for Urdu voices first
+                    v => v.lang.startsWith('ur') && (v.name.includes('Neural') || v.name.includes('Premium') || v.name.includes('Enhanced')),
+                    v => v.lang.startsWith('ur') && v.name.includes('Female'),
+                    v => v.lang.startsWith('ur'),
+                    // Fallback to Hindi voices (often better quality than basic Urdu)
+                    v => v.lang.startsWith('hi') && (v.name.includes('Neural') || v.name.includes('Premium')),
+                    v => v.lang.startsWith('hi') && v.name.includes('Female'),
+                    v => v.lang.startsWith('hi')
+                ];
+                
+                let selectedVoice = null;
+                for (const priority of urduVoicePriorities) {
+                    selectedVoice = voices.find(priority);
+                    if (selectedVoice) break;
+                }
+                
+                if (selectedVoice) {
+                    utterance.voice = selectedVoice;
+                    utterance.lang = selectedVoice.lang; // Use the voice's actual language
                 }
             } else {
-                // Try to find a natural English voice
-                const englishVoice = voices.find(v => 
-                    v.lang.startsWith('en') && 
-                    (v.name.includes('Natural') || v.name.includes('Premium') || v.name.includes('Enhanced'))
-                ) || voices.find(v => v.lang.startsWith('en-US'));
-                if (englishVoice) utterance.voice = englishVoice;
+                // Priority order for English voices (most natural/human-like first)
+                const englishVoicePriorities = [
+                    // Neural/premium voices (most natural)
+                    v => v.lang.startsWith('en') && (v.name.includes('Neural') || v.name.includes('neural')),
+                    // Premium/Enhanced voices
+                    v => v.lang.startsWith('en') && (v.name.includes('Premium') || v.name.includes('premium')),
+                    v => v.lang.startsWith('en') && (v.name.includes('Enhanced') || v.name.includes('enhanced')),
+                    // Google's natural voices
+                    v => v.lang.startsWith('en') && (v.name.includes('Google') && v.name.includes('Natural')),
+                    // Microsoft's natural voices
+                    v => v.lang.startsWith('en') && (v.name.includes('Microsoft') && (v.name.includes('Zira') || v.name.includes('Mark'))),
+                    // Apple's high-quality voices (Siri-like)
+                    v => v.lang.startsWith('en') && (v.name.includes('Samantha') || v.name.includes('Alex') || v.name.includes('Victoria')),
+                    // Female voices (often sound more natural)
+                    v => v.lang.startsWith('en-US') && v.name.includes('Female'),
+                    v => v.lang.startsWith('en-US') && v.gender === 'female',
+                    // Any en-US voice
+                    v => v.lang.startsWith('en-US'),
+                    // Any English voice as last resort
+                    v => v.lang.startsWith('en')
+                ];
+                
+                let selectedVoice = null;
+                for (const priority of englishVoicePriorities) {
+                    selectedVoice = voices.find(priority);
+                    if (selectedVoice) {
+                        console.log('Selected English voice:', selectedVoice.name, selectedVoice.lang);
+                        break;
+                    }
+                }
+                
+                if (selectedVoice) {
+                    utterance.voice = selectedVoice;
+                    utterance.lang = selectedVoice.lang;
+                    // Adjust rate slightly based on voice type for more natural speech
+                    if (selectedVoice.name.includes('Neural') || selectedVoice.name.includes('Natural')) {
+                        utterance.rate = 0.95; // Neural voices can be slightly faster
+                    }
+                }
             }
             
             // Handle speech events

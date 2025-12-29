@@ -237,6 +237,58 @@
             margin-top: 20px;
         }
 
+        .stats-bar {
+            background: #f0f0f0;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            text-align: center;
+            font-size: 0.95rem;
+        }
+
+        .book-container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .book-title {
+            text-align: center;
+            color: #667eea;
+            font-size: 2.5rem;
+            margin-bottom: 40px;
+            padding-bottom: 20px;
+            border-bottom: 3px solid #667eea;
+        }
+
+        .book-chapter {
+            margin-bottom: 40px;
+            padding-bottom: 30px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .book-chapter:last-child {
+            border-bottom: none;
+        }
+
+        .book-chapter h3 {
+            color: #764ba2;
+            font-size: 1.8rem;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #764ba2;
+        }
+
+        .book-chapter p {
+            line-height: 1.8;
+            font-size: 1.1rem;
+            color: #333;
+            text-align: justify;
+        }
+
         .analysis-section {
             margin-bottom: 20px;
         }
@@ -587,14 +639,58 @@
         function displayAnalysis(analysis, stats) {
             const analysisResult = document.getElementById('analysisResult');
             
-            let html = '<div class="analysis-result"><h3>🤖 AI Analysis Results</h3>';
+            let html = '<div class="analysis-result"><h3>📚 Comprehensive Biography Book</h3>';
             
             if (stats) {
-                html += `<p><strong>Total Conversations:</strong> ${stats.totalConversations}</p>`;
-                html += `<p><strong>Date Range:</strong> ${new Date(stats.dateRange.first).toLocaleDateString()} - ${new Date(stats.dateRange.last).toLocaleDateString()}</p>`;
+                html += `<div class="stats-bar"><strong>Total Conversations:</strong> ${stats.totalConversations} | <strong>Total Memories:</strong> ${stats.totalMemories || 0} | <strong>Date Range:</strong> ${new Date(stats.dateRange.first).toLocaleDateString()} - ${new Date(stats.dateRange.last).toLocaleDateString()}</div>`;
             }
             
-            if (analysis.summary) {
+            // Display book-like structure if available
+            if (analysis.book) {
+                html += `<div class="book-container">`;
+                html += `<h2 class="book-title">${analysis.book.title || 'The Life Story'}</h2>`;
+                
+                if (analysis.book.introduction) {
+                    html += `<div class="book-chapter"><h3>Introduction</h3><p>${analysis.book.introduction}</p></div>`;
+                }
+                
+                if (analysis.book.earlyLife) {
+                    html += `<div class="book-chapter"><h3>Early Life & Childhood</h3><p>${analysis.book.earlyLife}</p></div>`;
+                }
+                
+                if (analysis.book.personality) {
+                    html += `<div class="book-chapter"><h3>Personality & Character</h3><p>${analysis.book.personality}</p></div>`;
+                }
+                
+                if (analysis.book.lifeJourney) {
+                    html += `<div class="book-chapter"><h3>Life Journey & Experiences</h3><p style="white-space: pre-wrap;">${analysis.book.lifeJourney}</p></div>`;
+                }
+                
+                if (analysis.book.relationships) {
+                    html += `<div class="book-chapter"><h3>Relationships & Family</h3><p>${analysis.book.relationships}</p></div>`;
+                }
+                
+                if (analysis.book.values) {
+                    html += `<div class="book-chapter"><h3>Values, Beliefs & Philosophy</h3><p>${analysis.book.values}</p></div>`;
+                }
+                
+                if (analysis.book.stories) {
+                    html += `<div class="book-chapter"><h3>Memorable Stories & Anecdotes</h3><p style="white-space: pre-wrap;">${analysis.book.stories}</p></div>`;
+                }
+                
+                if (analysis.book.themes) {
+                    html += `<div class="book-chapter"><h3>Key Themes</h3><p>${analysis.book.themes}</p></div>`;
+                }
+                
+                if (analysis.book.conclusion) {
+                    html += `<div class="book-chapter"><h3>Conclusion</h3><p>${analysis.book.conclusion}</p></div>`;
+                }
+                
+                html += `</div>`;
+            }
+            
+            // Fallback to structured format if book structure not available
+            if (!analysis.book && analysis.summary) {
                 html += `<div class="analysis-section"><h4>Summary</h4><p>${analysis.summary}</p></div>`;
             }
             

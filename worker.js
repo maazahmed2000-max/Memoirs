@@ -320,11 +320,11 @@ async function handleChat(request, env) {
 
         // Use Hugging Face Inference API (FREE, no API key needed for basic models)
         // Using better conversational models - try multiple options for best quality
-        // Priority: BlenderBot (best for conversations) > DialoGPT-large > DialoGPT-medium
+        // Priority: Try simpler, more reliable models first
         const modelOptions = [
-            'facebook/blenderbot-400M-distill',  // Best free conversational model
-            'microsoft/DialoGPT-large',          // Larger, better quality
-            'microsoft/DialoGPT-medium'         // Fallback
+            'microsoft/DialoGPT-medium',         // Most reliable, works without auth
+            'microsoft/DialoGPT-large',        // Larger version
+            'facebook/blenderbot-400M-distill'  // May need different format
         ];
         
         let aiResponse = '';
@@ -343,33 +343,67 @@ async function handleChat(request, env) {
                         past_user_inputs: recentHistory.map(m => m.user).slice(-5),
                         generated_responses: recentHistory.map(m => m.ai).slice(-5),
                         text: message
-                    },
-                    parameters: {
-                        return_full_text: false,
-                        max_new_tokens: 150,
-                        temperature: 0.7,
-                        do_sample: true
                     }
                 })
                 });
 
                 if (response.ok) {
                     const result = await response.json();
-                    let rawResponse = result.generated_text || result[0]?.generated_text || '';
+                    
+                    // Log the raw response for debugging
+                    console.log(`Model ${modelName} response:`, JSON.stringify(result).substring(0, 200));
+                    
+                    // Try multiple possible response formats
+                    let rawResponse = '';
+                    
+                    // Format 1: Direct generated_text
+                    if (result.generated_text) {
+                        rawResponse = result.generated_text;
+                    }
+                    // Format 2: Array with generated_text
+                    else if (Array.isArray(result) && result[0]?.generated_text) {
+                        rawResponse = result[0].generated_text;
+                    }
+                    // Format 3: Array with text property
+                    else if (Array.isArray(result) && result[0]?.text) {
+                        rawResponse = result[0].text;
+                    }
+                    // Format 4: Direct text property
+                    else if (result.text) {
+                        rawResponse = result.text;
+                    }
+                    // Format 5: Conversational model format
+                    else if (result.conversation?.generated_responses && result.conversation.generated_responses.length > 0) {
+                        rawResponse = result.conversation.generated_responses[result.conversation.generated_responses.length - 1];
+                    }
+                    // Format 6: Check if it's a string directly
+                    else if (typeof result === 'string') {
+                        rawResponse = result;
+                    }
+                    
+                    // Clean and check response
+                    rawResponse = rawResponse ? String(rawResponse).trim() : '';
+                    
+                    console.log(`Extracted response from ${modelName}:`, rawResponse.substring(0, 100));
                     
                     // Check if we got a valid response
-                    if (rawResponse && rawResponse.trim().length > 5) {
+                    if (rawResponse && rawResponse.length > 3) {
                         // Post-process to ensure quality responses
                         aiResponse = enhanceAIResponse(rawResponse, message, language, conversationHistory);
+                        console.log(`Using response from ${modelName}`);
                         break; // Success, stop trying other models
+                    } else {
+                        console.log(`Model ${modelName} returned empty/invalid response, trying next...`);
                     }
                 } else if (response.status === 503) {
                     // Model is loading, try next one
                     const errorData = await response.json().catch(() => ({}));
-                    console.log(`Model ${modelName} is loading, trying next...`);
+                    console.log(`Model ${modelName} is loading (503), trying next...`);
                     continue;
                 } else {
                     // Other error, try next model
+                    const errorText = await response.text().catch(() => '');
+                    console.log(`Model ${modelName} error (${response.status}):`, errorText.substring(0, 200));
                     lastError = `HTTP ${response.status}`;
                     continue;
                 }
@@ -380,13 +414,66 @@ async function handleChat(request, env) {
             }
         }
         
-        // If all models failed, use minimal fallback
+        // If all conversational models failed, try a simple text generation model
+        if (!aiResponse || aiResponse.trim().length < 3) {
+            console.log('All conversational models failed, trying text generation model...');
+            
+            try {
+                // Try a simple text generation model with better prompt
+                const conversationText = recentHistory.map(h => `Human: ${h.user}\nAI: ${h.ai}`).join('\n\n') + `\n\nHuman: ${message}\nAI:`;
+                
+                const textGenResponse = await fetch('https://api-inference.huggingface.co/models/gpt2', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        inputs: conversationText,
+                        parameters: {
+                            max_new_tokens: 50,
+                            temperature: 0.8,
+                            return_full_text: false
+                        }
+                    })
+                });
+                
+                if (textGenResponse.ok) {
+                    const textGenResult = await textGenResponse.json();
+                    let genText = '';
+                    
+                    if (textGenResult[0]?.generated_text) {
+                        genText = textGenResult[0].generated_text;
+                    } else if (typeof textGenResult === 'string') {
+                        genText = textGenResult;
+                    }
+                    
+                    // Extract just the AI part (after "AI:")
+                    const aiPart = genText.split('AI:').pop() || genText;
+                    const cleaned = aiPart.split('\n')[0].trim();
+                    
+                    if (cleaned && cleaned.length > 5) {
+                        aiResponse = enhanceAIResponse(cleaned, message, language, conversationHistory);
+                        console.log('Got response from GPT-2 fallback');
+                    }
+                }
+            } catch (fallbackError) {
+                console.log('Text generation fallback also failed:', fallbackError.message);
+            }
+        }
+        
+        // Final fallback - only if everything failed
         if (!aiResponse || aiResponse.trim().length < 3) {
             console.log('All AI models failed, using minimal fallback');
-            // Minimal fallback - just acknowledge and ask to continue
-            aiResponse = language === 'ur-PK'
-                ? 'جی، میں یہاں ہوں۔ آپ کیا کہنا چاہتے ہیں؟'
-                : 'Yes, I\'m here. What would you like to tell me?';
+            // Minimal fallback - acknowledge based on what they said
+            if (message.toLowerCase().includes('hear') || message.toLowerCase().includes('there')) {
+                aiResponse = language === 'ur-PK'
+                    ? 'جی ہاں، میں آپ کو سن رہا ہوں!'
+                    : 'Yes, I can hear you!';
+            } else {
+                aiResponse = language === 'ur-PK'
+                    ? 'جی، میں یہاں ہوں۔ آپ کیا کہنا چاہتے ہیں؟'
+                    : 'Yes, I\'m here. What would you like to tell me?';
+            }
         }
 
             // Save conversation to database
@@ -820,9 +907,11 @@ async function handleAdminAnalyze(request, env) {
             );
         }
 
-        // Get all conversations for this person
+        // Get all conversations AND memories for this person
         // Check if person_id column exists first
         let conversationsResult;
+        let memoriesResult;
+        
         try {
             await env.DB.prepare('SELECT person_id FROM conversations LIMIT 1').first();
             // Column exists, query with person_id filter
@@ -830,27 +919,47 @@ async function handleAdminAnalyze(request, env) {
                 'SELECT * FROM conversations WHERE person_id = ? ORDER BY timestamp ASC'
             ).bind(personId).all();
         } catch (colError) {
-            // Column doesn't exist yet - return empty or all conversations
+            // Column doesn't exist yet - return empty
             console.log('person_id column does not exist yet, returning empty conversations');
             conversationsResult = { results: [] };
         }
 
-        const conversations = conversationsResult.results || [];
+        // Get memories for this person
+        try {
+            memoriesResult = await env.DB.prepare(
+                'SELECT * FROM grandma_memories WHERE person_id = ? ORDER BY timestamp ASC'
+            ).bind(personId).all();
+        } catch (memError) {
+            console.log('Error getting memories:', memError);
+            memoriesResult = { results: [] };
+        }
 
-        if (conversations.length === 0) {
+        const conversations = conversationsResult.results || [];
+        const memories = memoriesResult.results || [];
+
+        if (conversations.length === 0 && memories.length === 0) {
             return new Response(
-                JSON.stringify({ success: false, error: 'No conversations found for this person' }),
+                JSON.stringify({ success: false, error: 'No conversations or memories found for this person' }),
                 { status: 404, headers: { 'Content-Type': 'application/json', ...getCORSHeaders() } }
             );
         }
 
-        // Build conversation text for analysis
+        // Build comprehensive text for analysis - include both conversations and memories
         const conversationText = conversations.map(conv => 
-            `User: ${conv.user_message}\nAI: ${conv.ai_response}`
+            `[${new Date(conv.timestamp).toLocaleDateString()}] User: ${conv.user_message}\nAI: ${conv.ai_response}`
         ).join('\n\n');
+        
+        const memoriesText = memories.map(mem => 
+            `[${new Date(mem.timestamp).toLocaleDateString()}] Memory: ${mem.text}`
+        ).join('\n\n');
+        
+        const allText = [
+            memoriesText && memoriesText.length > 0 ? `=== SAVED MEMORIES ===\n${memoriesText}` : '',
+            conversationText && conversationText.length > 0 ? `=== CONVERSATIONS ===\n${conversationText}` : ''
+        ].filter(Boolean).join('\n\n');
 
-        // Generate analysis using AI
-        const analysis = await generatePersonAnalysis(personId, conversations, conversationText);
+        // Generate comprehensive book-like analysis
+        const analysis = await generatePersonAnalysis(personId, conversations, memories, allText);
 
         return new Response(
             JSON.stringify({
@@ -859,10 +968,11 @@ async function handleAdminAnalyze(request, env) {
                 analysis: analysis,
                 stats: {
                     totalConversations: conversations.length,
+                    totalMemories: memories.length,
                     totalMessages: conversations.length * 2,
                     dateRange: {
-                        first: conversations[0]?.timestamp,
-                        last: conversations[conversations.length - 1]?.timestamp
+                        first: conversations[0]?.timestamp || memories[0]?.timestamp,
+                        last: conversations[conversations.length - 1]?.timestamp || memories[memories.length - 1]?.timestamp
                     }
                 }
             }),
@@ -884,31 +994,59 @@ async function handleAdminAnalyze(request, env) {
 }
 
 /**
- * Generates AI-powered analysis of a person's conversations
+ * Generates comprehensive, book-like AI analysis of a person's life from conversations and memories
+ * Creates a detailed narrative biography
  */
-async function generatePersonAnalysis(personId, conversations, conversationText) {
-    // Create a comprehensive prompt for analysis
-    const analysisPrompt = `Analyze the following conversations with a person and provide:
-1. A brief summary of who this person is
-2. Key topics and themes they discuss
-3. Personality traits and characteristics
-4. Important life events mentioned
-5. Family and relationships
-6. Values and beliefs
-7. Memorable stories or anecdotes
+async function generatePersonAnalysis(personId, conversations, memories, allText) {
+    // Create a comprehensive, book-like prompt for analysis
+    const analysisPrompt = `You are writing a comprehensive biography book about a person based on their conversations and saved memories. Create a detailed, narrative-style analysis that reads like chapters of a book.
 
-Conversations:
-${conversationText.substring(0, 8000)} ${conversationText.length > 8000 ? '... (truncated)' : ''}
+Write a comprehensive biography with the following structure:
 
-Provide a structured analysis in JSON format with these sections:
+1. **Introduction & Overview** (2-3 paragraphs): Who is this person? What is their background? What makes them unique?
+
+2. **Early Life & Childhood** (detailed section): Where did they grow up? What was their childhood like? Family background, early experiences, education.
+
+3. **Personality & Character** (detailed section): What are their defining personality traits? How do they approach life? What are their strengths, quirks, and characteristics?
+
+4. **Life Journey & Experiences** (detailed section): Major life events, transitions, challenges, and achievements. Tell their story chronologically where possible.
+
+5. **Relationships & Family** (detailed section): Family members, friends, important relationships. How did they meet? What were these relationships like?
+
+6. **Values, Beliefs & Philosophy** (detailed section): What do they value? What are their beliefs? What principles guide their life?
+
+7. **Memorable Stories & Anecdotes** (detailed section): Specific stories, memories, and anecdotes they shared. Include details and context.
+
+8. **Key Themes & Topics** (summary): What topics do they frequently discuss? What are the recurring themes in their life?
+
+9. **Conclusion** (1-2 paragraphs): Summary of their life's essence, legacy, and what makes them special.
+
+Write this as a flowing narrative, like chapters in a biography book. Be detailed, specific, and use the actual words and details from their conversations and memories. Include dates, places, names, and specific events mentioned.
+
+Data to analyze:
+${allText.substring(0, 15000)} ${allText.length > 15000 ? '\n\n... (additional content truncated for length)' : ''}
+
+Provide your analysis as a comprehensive book-like narrative in JSON format:
 {
-  "summary": "Brief overview",
-  "topics": ["topic1", "topic2"],
-  "personality": ["trait1", "trait2"],
-  "lifeEvents": ["event1", "event2"],
+  "book": {
+    "title": "The Life Story of [Name]",
+    "introduction": "Detailed introduction paragraph(s)",
+    "earlyLife": "Detailed early life section",
+    "personality": "Detailed personality section",
+    "lifeJourney": "Detailed life journey section",
+    "relationships": "Detailed relationships section",
+    "values": "Detailed values and beliefs section",
+    "stories": "Detailed stories and anecdotes section",
+    "themes": "Summary of key themes",
+    "conclusion": "Conclusion paragraph(s)"
+  },
+  "summary": "Brief 2-3 sentence overview",
+  "topics": ["topic1", "topic2", "topic3"],
+  "personality": ["trait1", "trait2", "trait3"],
+  "lifeEvents": ["event1", "event2", "event3"],
   "relationships": ["relationship1", "relationship2"],
   "values": ["value1", "value2"],
-  "stories": ["story1", "story2"]
+  "stories": ["story1", "story2", "story3"]
 }`;
 
     try {
@@ -943,12 +1081,12 @@ Provide a structured analysis in JSON format with these sections:
                 note: 'AI analysis generated. Parse manually if needed.'
             };
         } else {
-            // Fallback: Generate basic analysis from patterns
-            return generateBasicAnalysis(conversations, conversationText);
+            // Fallback: Generate comprehensive analysis from patterns
+            return generateComprehensiveAnalysis(conversations, memories, allText);
         }
     } catch (error) {
         console.error('AI analysis error:', error);
-        return generateBasicAnalysis(conversations, conversationText);
+        return generateComprehensiveAnalysis(conversations, memories, allText);
     }
 }
 
