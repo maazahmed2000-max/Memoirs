@@ -400,6 +400,12 @@
             // Test the secret by trying to fetch data
             fetch(`${WORKER_URL}/admin/data?secret=${encodeURIComponent(secret)}`)
                 .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    return response.json();
+                })
                 .then(data => {
                     if (data.success) {
                         adminSecret = secret;
@@ -409,12 +415,12 @@
                         errorDiv.classList.add('hidden');
                         loadAllData();
                     } else {
-                        errorDiv.textContent = data.error || 'Invalid secret key';
+                        errorDiv.textContent = data.error || data.details || 'Invalid secret key';
                         errorDiv.classList.remove('hidden');
                     }
                 })
                 .catch(error => {
-                    errorDiv.textContent = 'Error connecting to server. Check your worker URL.';
+                    errorDiv.textContent = `Error: ${error.message}. Check your worker URL and that the ADMIN_SECRET is set in Cloudflare.`;
                     errorDiv.classList.remove('hidden');
                     console.error('Login error:', error);
                 });
@@ -430,22 +436,31 @@
 
         function loadAllData() {
             fetch(`${WORKER_URL}/admin/data?secret=${encodeURIComponent(adminSecret)}`)
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(data => {
+                            throw new Error(data.error || data.details || `HTTP ${response.status}`);
+                        });
+                    }
+                    return response.json();
+                })
                 .then(data => {
                     if (data.success) {
                         allData = data;
                         updateStats(data);
-                        displayPeople(data.people);
+                        displayPeople(data.people || []);
                     } else {
                         if (data.error && data.error.includes('Unauthorized')) {
                             logout();
                             alert('Session expired. Please login again.');
+                        } else {
+                            alert(`Error: ${data.error || data.details || 'Unknown error'}`);
                         }
                     }
                 })
                 .catch(error => {
                     console.error('Error loading data:', error);
-                    alert('Error loading data. Check console for details.');
+                    alert(`Error loading data: ${error.message}. Check console for details.`);
                 });
         }
 

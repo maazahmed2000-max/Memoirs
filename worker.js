@@ -654,9 +654,23 @@ function verifyAdminAccess(request, env) {
  */
 async function handleAdminGetData(request, env) {
     // Verify admin access
-    if (!verifyAdminAccess(request, env)) {
+    const url = new URL(request.url);
+    const providedSecret = url.searchParams.get('secret');
+    const adminSecret = env.ADMIN_SECRET;
+    
+    if (!adminSecret) {
         return new Response(
-            JSON.stringify({ success: false, error: 'Unauthorized. Provide ?secret=YOUR_SECRET_KEY' }),
+            JSON.stringify({ 
+                success: false, 
+                error: 'Admin secret not configured. Please set ADMIN_SECRET in Cloudflare Worker environment variables.' 
+            }),
+            { status: 500, headers: { 'Content-Type': 'application/json', ...getCORSHeaders() } }
+        );
+    }
+    
+    if (!providedSecret || providedSecret !== adminSecret) {
+        return new Response(
+            JSON.stringify({ success: false, error: 'Unauthorized. Invalid secret key.' }),
             { status: 401, headers: { 'Content-Type': 'application/json', ...getCORSHeaders() } }
         );
     }
@@ -682,7 +696,18 @@ async function handleAdminGetData(request, env) {
 
         query += ' ORDER BY timestamp ASC';
 
-        const result = await env.DB.prepare(query).bind(...params).all();
+        let result;
+        try {
+            if (params.length > 0) {
+                result = await env.DB.prepare(query).bind(...params).all();
+            } else {
+                result = await env.DB.prepare(query).all();
+            }
+        } catch (dbError) {
+            // Table might not exist yet
+            console.error('Error querying conversations:', dbError);
+            result = { results: [] };
+        }
 
         // Also get saved memories
         let memoriesQuery = 'SELECT * FROM grandma_memories';
@@ -692,11 +717,30 @@ async function handleAdminGetData(request, env) {
             memoriesParams.push(personId);
         }
         memoriesQuery += ' ORDER BY timestamp ASC';
-        const memoriesResult = await env.DB.prepare(memoriesQuery).bind(...memoriesParams).all();
+        
+        let memoriesResult;
+        try {
+            if (memoriesParams.length > 0) {
+                memoriesResult = await env.DB.prepare(memoriesQuery).bind(...memoriesParams).all();
+            } else {
+                memoriesResult = await env.DB.prepare(memoriesQuery).all();
+            }
+        } catch (dbError) {
+            // Table might not exist yet
+            console.error('Error querying memories:', dbError);
+            memoriesResult = { results: [] };
+        }
 
         // Get all unique people
-        const peopleResult = await env.DB.prepare('SELECT DISTINCT person_id FROM conversations').all();
-        const people = peopleResult.results ? peopleResult.results.map(row => row.person_id) : [];
+        let people = [];
+        try {
+            const peopleResult = await env.DB.prepare('SELECT DISTINCT person_id FROM conversations').all();
+            people = peopleResult.results ? peopleResult.results.map(row => row.person_id).filter(id => id && id !== 'default') : [];
+        } catch (dbError) {
+            // Table might not exist yet
+            console.error('Error querying people:', dbError);
+            people = [];
+        }
 
         return new Response(
             JSON.stringify({
