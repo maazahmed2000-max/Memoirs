@@ -302,14 +302,21 @@ async function handleChat(request, env) {
             );
         }
 
-        // Build conversation context for the AI - Make it human-like, conversational, and naturally curious
-        const systemPrompt = language === 'ur-PK' 
-            ? `آپ ایک دوستانہ، متجسس اور محبت کرنے والے انسان کی طرح بات کریں جو واقعی سننا چاہتا ہے۔ قدرتی طور پر بات کریں جیسے آپ کسی دوست سے بات کر رہے ہوں۔ جب کوئی کچھ بتائے تو اس پر توجہ دیں اور متعلقہ سوالات پوچھیں۔ ہمیشہ بات کو آگے بڑھانے کے لیے سوالات پوچھیں - "وہ کیسا تھا؟" "پھر کیا ہوا؟" "مجھے اس کے بارے میں مزید بتائیں" "یہ کب ہوا؟" "آپ نے کیسا محسوس کیا؟" جب بات رک جائے تو فوری طور پر ایک متعلقہ سوال پوچھیں تاکہ گفتگو جاری رہے۔`
-            : `You are a friendly, curious, and genuinely interested human having a natural conversation. Speak like you're talking to a friend - be warm, conversational, and show real interest. When someone shares something, acknowledge it naturally and ask relevant follow-up questions. Always keep the conversation flowing by asking questions like "What was that like?" "What happened next?" "Tell me more about that" "When did that happen?" "How did that make you feel?" If the conversation seems to be stopping, immediately ask a relevant follow-up question to keep it going. Be human-like in your responses - use natural language, show empathy, and be genuinely curious about their stories.`;
-
-        // Build conversation history for context
-        // Use last 5-7 messages for better context (not too long)
+        // Build conversation history for context - use actual conversation words
         const recentHistory = conversationHistory.slice(-7);
+        
+        // Build rich context from actual conversation history
+        let conversationContext = '';
+        if (recentHistory.length > 0) {
+            conversationContext = recentHistory.map(h => 
+                `Human: ${h.user}\nAI: ${h.ai}`
+            ).join('\n\n') + '\n\n';
+        }
+        
+        // Enhanced system prompt that uses actual conversation context
+        const systemPrompt = language === 'ur-PK' 
+            ? `آپ ایک دوستانہ، متجسس انسان ہیں جو واقعی سننا چاہتا ہے۔ قدرتی طور پر بات کریں۔ اگر کوئی سوال پوچھے تو براہ راست جواب دیں۔ اگر کوئی کہانی یا واقعہ بتائے تو اس کے الفاظ استعمال کرتے ہوئے متعلقہ سوالات پوچھیں۔ گفتگو کے الفاظ اور موضوعات کو استعمال کریں۔`
+            : `You are a friendly, curious person who genuinely wants to listen. Speak naturally. If someone asks a question, answer it directly. If someone shares a story or experience, ask relevant follow-up questions using the actual words and topics from the conversation. Use the specific words and phrases they used. Be conversational and natural - respond to what they actually said, not with generic phrases.`;
 
         // Use Hugging Face Inference API (FREE, no API key needed for basic models)
         // Using better conversational models - try multiple options for best quality
@@ -331,13 +338,19 @@ async function handleChat(request, env) {
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({
-                        inputs: {
-                            past_user_inputs: recentHistory.map(m => m.user).slice(-5),
-                            generated_responses: recentHistory.map(m => m.ai).slice(-5),
-                            text: message
-                        }
-                    })
+                body: JSON.stringify({
+                    inputs: {
+                        past_user_inputs: recentHistory.map(m => m.user).slice(-5),
+                        generated_responses: recentHistory.map(m => m.ai).slice(-5),
+                        text: message
+                    },
+                    parameters: {
+                        return_full_text: false,
+                        max_new_tokens: 150,
+                        temperature: 0.7,
+                        do_sample: true
+                    }
+                })
                 });
 
                 if (response.ok) {
@@ -367,10 +380,13 @@ async function handleChat(request, env) {
             }
         }
         
-        // If all models failed, use fallback
-        if (!aiResponse || aiResponse.trim().length < 5) {
-            console.log('All AI models failed, using fallback response generator');
-            aiResponse = generateFallbackResponse(message, language, conversationHistory);
+        // If all models failed, use minimal fallback
+        if (!aiResponse || aiResponse.trim().length < 3) {
+            console.log('All AI models failed, using minimal fallback');
+            // Minimal fallback - just acknowledge and ask to continue
+            aiResponse = language === 'ur-PK'
+                ? 'جی، میں یہاں ہوں۔ آپ کیا کہنا چاہتے ہیں؟'
+                : 'Yes, I\'m here. What would you like to tell me?';
         }
 
             // Save conversation to database
@@ -470,209 +486,36 @@ async function handleChat(request, env) {
 }
 
 /**
- * Enhances AI response to be more conversational and avoid generic responses
- * Detects dead stops and adds follow-up questions
+ * Minimal enhancement - only clean up the AI response, don't add hard-coded text
+ * Trust the AI model to generate appropriate responses
  */
 function enhanceAIResponse(rawResponse, userMessage, language, history) {
-    if (!rawResponse || rawResponse.trim().length < 5) {
-        // If response is too short, generate a contextual question
-        return generateContextualQuestion(userMessage, language, history);
+    if (!rawResponse || rawResponse.trim().length < 3) {
+        // Only if completely empty, use minimal fallback
+        return language === 'ur-PK' 
+            ? 'جی، میں یہاں ہوں۔ آپ کیا کہنا چاہتے ہیں؟'
+            : 'Yes, I\'m here. What would you like to tell me?';
     }
     
-    const response = rawResponse.trim();
-    const lowerResponse = response.toLowerCase();
-    const lowerUserMessage = userMessage.toLowerCase();
+    let response = rawResponse.trim();
     
-    // Detect if user message seems like a dead stop (short, acknowledgment, or ending statement)
-    const deadStopPatterns = language === 'ur-PK'
-        ? ['ہاں', 'نہیں', 'ٹھیک ہے', 'بہت اچھا', 'شکریہ', 'بس یہی', 'یہی تھا', 'کچھ نہیں']
-        : ['yes', 'no', 'okay', 'ok', 'alright', 'thanks', 'thank you', 'that\'s it', 'that\'s all', 'nothing', 'i don\'t know', 'i guess', 'maybe', 'probably'];
-    
-    const isDeadStop = deadStopPatterns.some(pattern => {
-        const userWords = lowerUserMessage.split(/\s+/);
-        return userWords.length <= 3 && lowerUserMessage.includes(pattern);
-    }) || (userMessage.length < 15 && !userMessage.includes('?'));
-    
-    // Filter out generic acknowledgments
-    const genericPatterns = language === 'ur-PK' 
-        ? ['میں سن رہا ہوں', 'ہاں', 'ٹھیک ہے', 'جی ہاں', 'اچھا', 'بہت اچھا']
-        : ['i\'m listening', 'yes', 'okay', 'i see', 'i understand', 'got it', 'sure', 'alright', 'that\'s nice', 'interesting'];
-    
-    // If response is too generic, replace with contextual question
-    if (genericPatterns.some(pattern => lowerResponse.includes(pattern) && response.length < 40)) {
-        return generateContextualQuestion(userMessage, language, history);
+    // Remove any obvious artifacts or incomplete sentences
+    // Remove if it's just a single word that doesn't make sense
+    if (response.split(/\s+/).length === 1 && response.length < 5) {
+        return language === 'ur-PK' 
+            ? 'مجھے مزید بتائیں؟'
+            : 'Tell me more?';
     }
     
-    // If user message seems like a dead stop, always add a follow-up question
-    if (isDeadStop) {
-        const followUp = generateFollowUpQuestion(userMessage, language, history);
-        return response + (response.endsWith('?') ? '' : (language === 'ur-PK' ? ' ' : ' ')) + followUp;
-    }
+    // Clean up common model artifacts
+    response = response.replace(/^[:\-]\s*/, ''); // Remove leading colons/dashes
+    response = response.replace(/\s+$/, ''); // Remove trailing whitespace
     
-    // If response doesn't end with a question and is short, add a follow-up
-    if (!response.includes('?') && response.length < 120) {
-        const followUp = generateFollowUpQuestion(userMessage, language, history);
-        // Only add if it makes sense (response isn't already complete)
-        if (!lowerResponse.includes('thank you') && !lowerResponse.includes('goodbye') && !lowerResponse.includes('bye')) {
-            return response + (language === 'ur-PK' ? ' ' : ' ') + followUp;
-        }
-    }
-    
-    // If response ends with a question but is very short, enhance it
-    if (response.includes('?') && response.length < 30) {
-        return generateContextualQuestion(userMessage, language, history);
-    }
-    
+    // Return the AI's response as-is - trust the model
     return response;
 }
 
-/**
- * Generates a follow-up question when conversation seems to be stopping
- */
-function generateFollowUpQuestion(message, language, history) {
-    const msg = message.toLowerCase();
-    const recentTopics = history.slice(-5).map(h => h.user.toLowerCase()).join(' ');
-    const lastUserMessage = history.length > 0 ? history[history.length - 1].user.toLowerCase() : '';
-    
-    if (language === 'ur-PK') {
-        // Detect topic from recent conversation
-        if (recentTopics.includes('بچپن') || recentTopics.includes('بچپن میں')) {
-            return 'آپ کے بچپن کی کوئی اور یاد؟';
-        }
-        if (recentTopics.includes('خاندان') || recentTopics.includes('والدین')) {
-            return 'آپ کے خاندان کے بارے میں مزید بتائیں؟';
-        }
-        if (recentTopics.includes('شادی') || recentTopics.includes('بیوی') || recentTopics.includes('شوہر')) {
-            return 'آپ کی شادی کی کہانی کیا ہے؟';
-        }
-        if (recentTopics.includes('کام') || recentTopics.includes('ملازمت')) {
-            return 'آپ کو اپنے کام میں کیا پسند تھا؟';
-        }
-        if (recentTopics.includes('سفر') || recentTopics.includes('سفری')) {
-            return 'آپ نے کہاں کہاں سفر کیا ہے؟';
-        }
-        if (recentTopics.includes('دوست') || recentTopics.includes('دوستی')) {
-            return 'آپ کے بہترین دوست کون تھے؟';
-        }
-        // Generic follow-ups
-        return 'مجھے اس کے بارے میں مزید بتائیں؟';
-    } else {
-        // Detect topic from recent conversation
-        if (recentTopics.includes('childhood') || recentTopics.includes('grew up')) {
-            return 'What else do you remember from your childhood?';
-        }
-        if (recentTopics.includes('family') || recentTopics.includes('parents') || recentTopics.includes('siblings')) {
-            return 'Tell me more about your family?';
-        }
-        if (recentTopics.includes('married') || recentTopics.includes('spouse') || recentTopics.includes('husband') || recentTopics.includes('wife')) {
-            return 'How did you meet your spouse?';
-        }
-        if (recentTopics.includes('work') || recentTopics.includes('job') || recentTopics.includes('career')) {
-            return 'What did you enjoy most about your work?';
-        }
-        if (recentTopics.includes('travel') || recentTopics.includes('visited') || recentTopics.includes('went to')) {
-            return 'Where else have you traveled?';
-        }
-        if (recentTopics.includes('school') || recentTopics.includes('education')) {
-            return 'What was your favorite subject in school?';
-        }
-        if (recentTopics.includes('friend') || recentTopics.includes('friendship')) {
-            return 'Who were your best friends?';
-        }
-        // Generic follow-ups - more natural and varied
-        const genericFollowUps = [
-            'Tell me more about that?',
-            'What else happened?',
-            'How did that make you feel?',
-            'What was that like?',
-            'Can you share more details?',
-            'What happened next?',
-            'I\'d love to hear more about that.'
-        ];
-        return genericFollowUps[Math.floor(Math.random() * genericFollowUps.length)];
-    }
-}
-
-/**
- * Generates contextual follow-up questions based on user message
- */
-function generateContextualQuestion(message, language, history) {
-    const msg = message.toLowerCase();
-    const recentTopics = history.slice(-3).map(h => h.user.toLowerCase()).join(' ');
-    
-    if (language === 'ur-PK') {
-        // Urdu contextual questions - natural like a child
-        if (msg.includes('میرا نام') || msg.includes('میں ہوں') || msg.match(/my name is|i am|i'm/)) {
-            const nameMatch = msg.match(/(?:میرا نام|میں ہوں|my name is|i am|i'm)\s+(\w+)/i);
-            const name = nameMatch ? nameMatch[1] : '';
-            return name ? `آپ سے مل کر بہت خوشی ہوئی، ${name}! آپ مجھے اپنے بارے میں کچھ بتائیں - آپ کہاں رہتے ہیں؟` : 'آپ سے مل کر خوشی ہوئی! آپ مجھے اپنے بارے میں کچھ بتائیں۔';
-        }
-        if (msg.includes('بچپن') || msg.includes('بچپن میں') || recentTopics.includes('بچپن')) {
-            return 'وہ کیا تھا؟ مجھے مزید بتائیں!';
-        }
-        if (msg.includes('خاندان') || msg.includes('والدین') || recentTopics.includes('خاندان')) {
-            return 'آپ کے خاندان کے بارے میں مزید بتائیں! آپ کے والدین کیا کرتے تھے؟';
-        }
-        if (msg.includes('شادی') || msg.includes('بیوی') || msg.includes('شوہر')) {
-            return 'وہ کیسا تھا؟ آپ اپنے ساتھی سے کیسے ملے؟';
-        }
-        if (msg.includes('کام') || msg.includes('ملازمت') || recentTopics.includes('کام')) {
-            return 'وہ کیسا تھا؟ آپ کو کیا پسند تھا؟';
-        }
-        if (msg.includes('سفر') || msg.includes('سفری') || recentTopics.includes('سفر')) {
-            return 'وہاں کیا ہوا؟ مجھے مزید بتائیں!';
-        }
-        return 'وہ کیسا تھا؟ مجھے مزید بتائیں!';
-    } else {
-        // English contextual questions - natural like a child/grandchild
-        if (msg.includes('my name is') || msg.includes("i'm") || msg.includes('i am')) {
-            const nameMatch = msg.match(/(?:my name is|i'm|i am)\s+(\w+)/i);
-            const name = nameMatch ? nameMatch[1] : '';
-            return name ? `Nice to meet you, ${name}! Tell me about yourself - where are you from?` : 'Nice to meet you! Tell me about yourself.';
-        }
-        if (msg.includes('hello') || msg.includes('hi') || msg.includes('hey')) {
-            return 'Hi there! I\'m really excited to talk with you! What\'s your name?';
-        }
-        if (msg.includes('childhood') || msg.includes('grew up') || recentTopics.includes('childhood')) {
-            return 'That sounds wonderful! What was your childhood like? What are some of your favorite memories from that time?';
-        }
-        if (msg.includes('family') || msg.includes('parents') || msg.includes('siblings') || recentTopics.includes('family')) {
-            return 'I\'d love to hear more about your family! What were your parents like? Did you have siblings?';
-        }
-        if (msg.includes('married') || msg.includes('spouse') || msg.includes('husband') || msg.includes('wife')) {
-            return 'That\'s beautiful! How did you two meet? What was your wedding like?';
-        }
-        if (msg.includes('work') || msg.includes('job') || msg.includes('career') || recentTopics.includes('work')) {
-            return 'That\'s interesting! What did you do for work? What did you enjoy most about it?';
-        }
-        if (msg.includes('travel') || msg.includes('visited') || msg.includes('went to') || recentTopics.includes('travel')) {
-            return 'Oh, I love hearing about travels! Where did you go? What was your favorite place?';
-        }
-        if (msg.includes('school') || msg.includes('education') || msg.includes('learned') || recentTopics.includes('school')) {
-            return 'Tell me about your school days! What was your favorite subject? Who was your favorite teacher?';
-        }
-        if (msg.includes('friend') || msg.includes('friendship') || recentTopics.includes('friend')) {
-            return 'Friends are so important! What made them special? How did you meet?';
-        }
-        // More natural, human-like follow-ups
-        const naturalFollowUps = [
-            'That\'s really interesting! Tell me more about that.',
-            'I\'d love to hear more! What happened next?',
-            'That sounds amazing! Can you share more details?',
-            'Wow, that\'s fascinating! How did that make you feel?',
-            'That\'s wonderful! What else can you tell me about that?'
-        ];
-        return naturalFollowUps[Math.floor(Math.random() * naturalFollowUps.length)];
-    }
-}
-
-/**
- * Generates a fallback response when AI API is unavailable
- * Uses contextual pattern matching to ask engaging questions
- */
-function generateFallbackResponse(message, language, history) {
-    return generateContextualQuestion(message, language, history);
-}
+// Removed hard-coded response generators - let the AI model handle everything based on conversation context
 
 /**
  * Handles GET /conversations endpoint
