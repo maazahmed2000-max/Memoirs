@@ -3,6 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Language" content="en">
+    <!-- iOS Safari specific meta tags for better Urdu support -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="format-detection" content="telephone=no">
     <title>Speech to Text - Simple Voice Recorder</title>
     <style>
         /* Reset and base styles */
@@ -13,7 +17,7 @@
         }
 
         body {
-            font-family: Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Nastaliq Urdu", "Noto Sans Arabic", "Al Bayan", "Geeza Pro", "Arial Unicode MS", Arial, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             display: flex;
@@ -243,12 +247,37 @@
             font-size: 1.3rem;
             line-height: 1.6;
             margin-bottom: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Nastaliq Urdu", "Noto Sans Arabic", "Al Bayan", "Geeza Pro", "Arial Unicode MS", Arial, sans-serif;
+            /* Support for Urdu text rendering on iOS */
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            text-rendering: optimizeLegibility;
+        }
+
+        /* Urdu (RTL) text direction support */
+        .transcription-area[dir="rtl"] {
+            direction: rtl;
+            text-align: right;
+            unicode-bidi: bidi-override;
+        }
+
+        /* Mixed content (English + Urdu) support */
+        .transcription-area[dir="auto"] {
+            direction: auto;
+            unicode-bidi: plaintext;
         }
 
         .transcription-area:empty::before {
             content: "Your transcribed text will appear here...";
             color: #999;
             font-style: italic;
+        }
+
+        /* Urdu-specific styling for better iOS rendering */
+        .transcription-area.urdu-text {
+            direction: rtl;
+            text-align: right;
+            font-family: -apple-system, BlinkMacSystemFont, "Noto Nastaliq Urdu", "Noto Sans Arabic", "Al Bayan", "Geeza Pro", "Arial Unicode MS", Arial, sans-serif;
         }
 
         /* Error message styling */
@@ -534,8 +563,16 @@
                 
                 // CRITICAL FOR iOS: Set language BEFORE calling start()
                 // The language must be set during object creation, not after
+                // For iOS Safari, ensure Urdu language code is properly formatted
                 try {
-                    recognition.lang = currentLanguage;
+                    // iOS Safari may require specific language code format for Urdu
+                    // Try ur-PK first, fallback to ur if needed
+                    if (currentLanguage === 'ur-PK') {
+                        // iOS Safari supports ur-PK, but we'll also try 'ur' as fallback
+                        recognition.lang = 'ur-PK';
+                    } else {
+                        recognition.lang = currentLanguage;
+                    }
                 } catch (error) {
                     console.warn('Error setting language, using default:', error);
                     // Try to continue with default language
@@ -635,9 +672,21 @@
 
                     // Safely update the transcription display
                     try {
-                        transcriptionDiv.textContent = finalTranscript + interimTranscript;
+                        // For Urdu, ensure proper text direction and rendering
+                        const combinedText = finalTranscript + interimTranscript;
+                        transcriptionDiv.textContent = combinedText;
+                        
+                        // Ensure proper direction for Urdu text on iOS
+                        if (currentLanguage === 'ur-PK') {
+                            transcriptionDiv.setAttribute('dir', 'rtl');
+                            transcriptionDiv.classList.add('urdu-text');
+                        }
                         
                         // Auto-scroll to bottom if content is long
+                        // For RTL, scroll to the right side (start)
+                        if (currentLanguage === 'ur-PK') {
+                            transcriptionDiv.scrollLeft = 0;
+                        }
                         transcriptionDiv.scrollTop = transcriptionDiv.scrollHeight;
                     } catch (e) {
                         console.error('Error updating transcription display:', e);
@@ -681,8 +730,12 @@
                     case 'service-not-allowed':
                         // Common on iOS Safari when language is not supported or service unavailable
                         errorMessage = 'Speech recognition service not available. This may happen if the selected language is not supported on your device.';
-                        if (isSafari()) {
-                            errorMessage += ' Try switching to English (en-US) or refresh the page.';
+                        if (isSafari() || isIOSSafari()) {
+                            if (currentLanguage === 'ur-PK') {
+                                errorMessage += ' Urdu (ur-PK) may not be fully supported on iOS Safari. Try switching to English (en-US) or ensure your iOS device has Urdu language support enabled in Settings.';
+                            } else {
+                                errorMessage += ' Try switching to English (en-US) or refresh the page.';
+                            }
                         }
                         break;
                     case 'network':
@@ -959,9 +1012,19 @@
             if (lang === 'en-US') {
                 langEnBtn.classList.add('active');
                 langUrBtn.classList.remove('active');
+                // Set LTR for English
+                transcriptionDiv.removeAttribute('dir');
+                transcriptionDiv.classList.remove('urdu-text');
+                // Update HTML lang attribute for better accessibility
+                document.documentElement.lang = 'en';
             } else {
                 langUrBtn.classList.add('active');
                 langEnBtn.classList.remove('active');
+                // Set RTL for Urdu to ensure proper rendering on iOS
+                transcriptionDiv.setAttribute('dir', 'rtl');
+                transcriptionDiv.classList.add('urdu-text');
+                // Update HTML lang attribute for better accessibility and iOS support
+                document.documentElement.lang = 'ur';
             }
 
             // Note: We don't update an existing recognition object's language
