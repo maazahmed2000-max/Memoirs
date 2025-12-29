@@ -8,5 +8,13 @@
       "database_name": "grandma-memory-db",
       "database_id": "db772d7b-b42b-43fa-918e-642e7c3e26b6"
     }
-  ]
+  ],
+  "observability": {
+    "logs": {
+      "enabled": false,
+      "head_sampling_rate": 1,
+      "invocation_logs": true,
+      "persist": true
+    }
+  }
 }
