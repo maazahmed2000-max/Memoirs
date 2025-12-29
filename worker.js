@@ -52,6 +52,19 @@ export default {
             return handleGetPeople(request, env);
         }
 
+        // Admin endpoints - require secret key
+        if (path === '/admin/data' && request.method === 'GET') {
+            return handleAdminGetData(request, env);
+        }
+
+        if (path === '/admin/analyze' && request.method === 'POST') {
+            return handleAdminAnalyze(request, env);
+        }
+
+        if (path === '/admin/query' && request.method === 'POST') {
+            return handleAdminQuery(request, env);
+        }
+
         // Handle unknown routes
         return new Response(
             JSON.stringify({ 
@@ -615,6 +628,358 @@ async function handleGetPeople(request, env) {
         console.error('Error getting people:', error);
         return new Response(
             JSON.stringify({ success: false, error: 'Internal server error' }),
+            { status: 500, headers: { 'Content-Type': 'application/json', ...getCORSHeaders() } }
+        );
+    }
+}
+
+/**
+ * Verifies admin access using secret key
+ * Set ADMIN_SECRET in Cloudflare Worker environment variables
+ */
+function verifyAdminAccess(request, env) {
+    const url = new URL(request.url);
+    const providedSecret = url.searchParams.get('secret') || request.headers.get('X-Admin-Secret');
+    const adminSecret = env.ADMIN_SECRET || 'CHANGE_THIS_SECRET_KEY';
+    
+    if (!providedSecret || providedSecret !== adminSecret) {
+        return false;
+    }
+    return true;
+}
+
+/**
+ * Handles GET /admin/data endpoint
+ * Returns all conversation data (admin only)
+ */
+async function handleAdminGetData(request, env) {
+    // Verify admin access
+    if (!verifyAdminAccess(request, env)) {
+        return new Response(
+            JSON.stringify({ success: false, error: 'Unauthorized. Provide ?secret=YOUR_SECRET_KEY' }),
+            { status: 401, headers: { 'Content-Type': 'application/json', ...getCORSHeaders() } }
+        );
+    }
+
+    try {
+        if (!env.DB) {
+            return new Response(
+                JSON.stringify({ success: false, error: 'Database not configured' }),
+                { status: 500, headers: { 'Content-Type': 'application/json', ...getCORSHeaders() } }
+            );
+        }
+
+        const url = new URL(request.url);
+        const personId = url.searchParams.get('personId'); // Optional: filter by person
+
+        let query = 'SELECT * FROM conversations';
+        let params = [];
+
+        if (personId) {
+            query += ' WHERE person_id = ?';
+            params.push(personId);
+        }
+
+        query += ' ORDER BY timestamp ASC';
+
+        const result = await env.DB.prepare(query).bind(...params).all();
+
+        // Also get saved memories
+        let memoriesQuery = 'SELECT * FROM grandma_memories';
+        let memoriesParams = [];
+        if (personId) {
+            memoriesQuery += ' WHERE person_id = ?';
+            memoriesParams.push(personId);
+        }
+        memoriesQuery += ' ORDER BY timestamp ASC';
+        const memoriesResult = await env.DB.prepare(memoriesQuery).bind(...memoriesParams).all();
+
+        // Get all unique people
+        const peopleResult = await env.DB.prepare('SELECT DISTINCT person_id FROM conversations').all();
+        const people = peopleResult.results ? peopleResult.results.map(row => row.person_id) : [];
+
+        return new Response(
+            JSON.stringify({
+                success: true,
+                conversations: result.results || [],
+                memories: memoriesResult.results || [],
+                people: people,
+                totalConversations: result.results?.length || 0,
+                totalMemories: memoriesResult.results?.length || 0
+            }),
+            {
+                status: 200,
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...getCORSHeaders()
+                }
+            }
+        );
+    } catch (error) {
+        console.error('Error getting admin data:', error);
+        return new Response(
+            JSON.stringify({ success: false, error: 'Internal server error', details: error.message }),
+            { status: 500, headers: { 'Content-Type': 'application/json', ...getCORSHeaders() } }
+        );
+    }
+}
+
+/**
+ * Handles POST /admin/analyze endpoint
+ * Uses AI to analyze a person's conversations and generate summaries
+ */
+async function handleAdminAnalyze(request, env) {
+    // Verify admin access
+    const body = await request.json().catch(() => ({}));
+    const providedSecret = body.secret || new URL(request.url).searchParams.get('secret') || request.headers.get('X-Admin-Secret');
+    const adminSecret = env.ADMIN_SECRET || 'CHANGE_THIS_SECRET_KEY';
+    
+    if (!providedSecret || providedSecret !== adminSecret) {
+        return new Response(
+            JSON.stringify({ success: false, error: 'Unauthorized. Provide secret in body or header' }),
+            { status: 401, headers: { 'Content-Type': 'application/json', ...getCORSHeaders() } }
+        );
+    }
+
+    try {
+        const { personId } = body;
+
+        if (!personId) {
+            return new Response(
+                JSON.stringify({ success: false, error: 'personId required' }),
+                { status: 400, headers: { 'Content-Type': 'application/json', ...getCORSHeaders() } }
+            );
+        }
+
+        if (!env.DB) {
+            return new Response(
+                JSON.stringify({ success: false, error: 'Database not configured' }),
+                { status: 500, headers: { 'Content-Type': 'application/json', ...getCORSHeaders() } }
+            );
+        }
+
+        // Get all conversations for this person
+        const conversationsResult = await env.DB.prepare(
+            'SELECT * FROM conversations WHERE person_id = ? ORDER BY timestamp ASC'
+        ).bind(personId).all();
+
+        const conversations = conversationsResult.results || [];
+
+        if (conversations.length === 0) {
+            return new Response(
+                JSON.stringify({ success: false, error: 'No conversations found for this person' }),
+                { status: 404, headers: { 'Content-Type': 'application/json', ...getCORSHeaders() } }
+            );
+        }
+
+        // Build conversation text for analysis
+        const conversationText = conversations.map(conv => 
+            `User: ${conv.user_message}\nAI: ${conv.ai_response}`
+        ).join('\n\n');
+
+        // Generate analysis using AI
+        const analysis = await generatePersonAnalysis(personId, conversations, conversationText);
+
+        return new Response(
+            JSON.stringify({
+                success: true,
+                personId: personId,
+                analysis: analysis,
+                stats: {
+                    totalConversations: conversations.length,
+                    totalMessages: conversations.length * 2,
+                    dateRange: {
+                        first: conversations[0]?.timestamp,
+                        last: conversations[conversations.length - 1]?.timestamp
+                    }
+                }
+            }),
+            {
+                status: 200,
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...getCORSHeaders()
+                }
+            }
+        );
+    } catch (error) {
+        console.error('Error analyzing person:', error);
+        return new Response(
+            JSON.stringify({ success: false, error: 'Internal server error', details: error.message }),
+            { status: 500, headers: { 'Content-Type': 'application/json', ...getCORSHeaders() } }
+        );
+    }
+}
+
+/**
+ * Generates AI-powered analysis of a person's conversations
+ */
+async function generatePersonAnalysis(personId, conversations, conversationText) {
+    // Create a comprehensive prompt for analysis
+    const analysisPrompt = `Analyze the following conversations with a person and provide:
+1. A brief summary of who this person is
+2. Key topics and themes they discuss
+3. Personality traits and characteristics
+4. Important life events mentioned
+5. Family and relationships
+6. Values and beliefs
+7. Memorable stories or anecdotes
+
+Conversations:
+${conversationText.substring(0, 8000)} ${conversationText.length > 8000 ? '... (truncated)' : ''}
+
+Provide a structured analysis in JSON format with these sections:
+{
+  "summary": "Brief overview",
+  "topics": ["topic1", "topic2"],
+  "personality": ["trait1", "trait2"],
+  "lifeEvents": ["event1", "event2"],
+  "relationships": ["relationship1", "relationship2"],
+  "values": ["value1", "value2"],
+  "stories": ["story1", "story2"]
+}`;
+
+    try {
+        // Use Hugging Face for text generation/analysis
+        const response = await fetch('https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                inputs: analysisPrompt
+            })
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            const aiAnalysis = result.generated_text || result[0]?.generated_text || '';
+            
+            // Try to extract JSON from response, or return as text
+            try {
+                const jsonMatch = aiAnalysis.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    return JSON.parse(jsonMatch[0]);
+                }
+            } catch (e) {
+                // If JSON parsing fails, return structured text analysis
+            }
+            
+            return {
+                summary: aiAnalysis.substring(0, 500),
+                rawAnalysis: aiAnalysis,
+                note: 'AI analysis generated. Parse manually if needed.'
+            };
+        } else {
+            // Fallback: Generate basic analysis from patterns
+            return generateBasicAnalysis(conversations, conversationText);
+        }
+    } catch (error) {
+        console.error('AI analysis error:', error);
+        return generateBasicAnalysis(conversations, conversationText);
+    }
+}
+
+/**
+ * Generates basic analysis when AI is unavailable
+ */
+function generateBasicAnalysis(conversations, conversationText) {
+    const text = conversationText.toLowerCase();
+    const topics = [];
+    const personality = [];
+    
+    // Extract topics
+    if (text.includes('family') || text.includes('parent')) topics.push('Family');
+    if (text.includes('childhood') || text.includes('grew up')) topics.push('Childhood');
+    if (text.includes('work') || text.includes('job')) topics.push('Work/Career');
+    if (text.includes('travel') || text.includes('visit')) topics.push('Travel');
+    if (text.includes('school') || text.includes('education')) topics.push('Education');
+    if (text.includes('marry') || text.includes('spouse')) topics.push('Marriage');
+    
+    // Extract personality hints
+    if (text.includes('love') || text.includes('care')) personality.push('Caring');
+    if (text.includes('hard work') || text.includes('dedicated')) personality.push('Hardworking');
+    if (text.includes('funny') || text.includes('humor')) personality.push('Humorous');
+    if (text.includes('adventure') || text.includes('explore')) personality.push('Adventurous');
+    
+    return {
+        summary: `This person has shared ${conversations.length} conversations covering various aspects of their life.`,
+        topics: [...new Set(topics)],
+        personality: [...new Set(personality)],
+        lifeEvents: [],
+        relationships: [],
+        values: [],
+        stories: [],
+        note: 'Basic pattern-based analysis. Use AI endpoint for detailed analysis.'
+    };
+}
+
+/**
+ * Handles POST /admin/query endpoint
+ * Allows querying conversations with natural language
+ */
+async function handleAdminQuery(request, env) {
+    // Verify admin access
+    const body = await request.json().catch(() => ({}));
+    const providedSecret = body.secret || new URL(request.url).searchParams.get('secret') || request.headers.get('X-Admin-Secret');
+    const adminSecret = env.ADMIN_SECRET || 'CHANGE_THIS_SECRET_KEY';
+    
+    if (!providedSecret || providedSecret !== adminSecret) {
+        return new Response(
+            JSON.stringify({ success: false, error: 'Unauthorized. Provide secret in body or header' }),
+            { status: 401, headers: { 'Content-Type': 'application/json', ...getCORSHeaders() } }
+        );
+    }
+
+    try {
+        const { query, personId } = body;
+
+        if (!query) {
+            return new Response(
+                JSON.stringify({ success: false, error: 'query required' }),
+                { status: 400, headers: { 'Content-Type': 'application/json', ...getCORSHeaders() } }
+            );
+        }
+
+        if (!env.DB) {
+            return new Response(
+                JSON.stringify({ success: false, error: 'Database not configured' }),
+                { status: 500, headers: { 'Content-Type': 'application/json', ...getCORSHeaders() } }
+            );
+        }
+
+        // Search conversations
+        let searchQuery = 'SELECT * FROM conversations WHERE (user_message LIKE ? OR ai_response LIKE ?)';
+        let params = [`%${query}%`, `%${query}%`];
+
+        if (personId) {
+            searchQuery += ' AND person_id = ?';
+            params.push(personId);
+        }
+
+        searchQuery += ' ORDER BY timestamp DESC LIMIT 50';
+
+        const result = await env.DB.prepare(searchQuery).bind(...params).all();
+
+        return new Response(
+            JSON.stringify({
+                success: true,
+                query: query,
+                results: result.results || [],
+                count: result.results?.length || 0
+            }),
+            {
+                status: 200,
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...getCORSHeaders()
+                }
+            }
+        );
+    } catch (error) {
+        console.error('Error querying:', error);
+        return new Response(
+            JSON.stringify({ success: false, error: 'Internal server error', details: error.message }),
             { status: 500, headers: { 'Content-Type': 'application/json', ...getCORSHeaders() } }
         );
     }
