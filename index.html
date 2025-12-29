@@ -419,6 +419,9 @@
         // Variable to store current language (not the recognition object)
         let currentLanguage = 'en-US'; // Default language
         
+        // Variable to track if we're using Hindi as a workaround for Urdu on iOS
+        let usingHindiWorkaround = false;
+        
         // DOM element references
         const startBtn = document.getElementById('start-btn');
         const stopBtn = document.getElementById('stop-btn');
@@ -563,16 +566,24 @@
                 
                 // CRITICAL FOR iOS: Set language BEFORE calling start()
                 // The language must be set during object creation, not after
-                // For iOS Safari, ensure Urdu language code is properly formatted
+                // iOS Safari does NOT support Urdu - use Hindi as workaround (iOS only)
                 try {
-                    // iOS Safari may require specific language code format for Urdu
-                    // Try ur-PK first, fallback to ur if needed
-                    if (currentLanguage === 'ur-PK') {
-                        // iOS Safari supports ur-PK, but we'll also try 'ur' as fallback
-                        recognition.lang = 'ur-PK';
+                    let recognitionLanguage = currentLanguage;
+                    usingHindiWorkaround = false;
+                    
+                    // iOS-specific workaround: Use Hindi for Urdu recognition
+                    // Hindi and Urdu are very similar, and iOS supports Hindi
+                    if (isIOSSafari() && currentLanguage === 'ur-PK') {
+                        // Use Hindi on iOS since Urdu is not supported
+                        // We'll convert the Hindi text to Urdu script for display
+                        recognitionLanguage = 'hi-IN';
+                        usingHindiWorkaround = true;
                     } else {
-                        recognition.lang = currentLanguage;
+                        // On non-iOS platforms, use Urdu directly
+                        recognitionLanguage = currentLanguage;
                     }
+                    
+                    recognition.lang = recognitionLanguage;
                 } catch (error) {
                     console.warn('Error setting language, using default:', error);
                     // Try to continue with default language
@@ -672,15 +683,25 @@
 
                     // Safely update the transcription display
                     try {
-                        // For Urdu, ensure proper text direction and rendering
-                        const combinedText = finalTranscript + interimTranscript;
-                        transcriptionDiv.textContent = combinedText;
+                        let displayText = finalTranscript + interimTranscript;
                         
-                        // Ensure proper direction for Urdu text on iOS
+                        // If we're using Hindi workaround for Urdu on iOS, convert to Urdu script
+                        if (usingHindiWorkaround && currentLanguage === 'ur-PK' && displayText.trim()) {
+                            // Convert Hindi (Devanagari) text to Urdu (Nastaliq/Arabic) script
+                            displayText = convertHindiToUrdu(displayText);
+                        }
+                        
+                        // For Urdu, ensure proper text direction and rendering
                         if (currentLanguage === 'ur-PK') {
                             transcriptionDiv.setAttribute('dir', 'rtl');
                             transcriptionDiv.classList.add('urdu-text');
+                        } else {
+                            // English - LTR
+                            transcriptionDiv.removeAttribute('dir');
+                            transcriptionDiv.classList.remove('urdu-text');
                         }
+                        
+                        transcriptionDiv.textContent = displayText;
                         
                         // Auto-scroll to bottom if content is long
                         // For RTL, scroll to the right side (start)
@@ -911,6 +932,21 @@
                 // Store reference so stopRecognition() can access it
                 currentRecognition = recognition;
 
+                // Show info message if using Hindi workaround on iOS
+                if (isIOSSafari() && currentLanguage === 'ur-PK' && usingHindiWorkaround) {
+                    // Show a brief info message
+                    const originalStatus = statusDiv.textContent;
+                    statusDiv.textContent = '💡 Using Hindi recognition (converting to Urdu script)';
+                    statusDiv.className = 'status idle';
+                    
+                    // Clear after 3 seconds
+                    setTimeout(() => {
+                        if (statusDiv.textContent.includes('Using Hindi')) {
+                            statusDiv.textContent = originalStatus;
+                        }
+                    }, 3000);
+                }
+
                 // CRITICAL FOR iOS: Call start() immediately, synchronously
                 // No async/await, no setTimeout, no delays
                 // iOS Safari requires start() to be called directly in the event handler
@@ -994,6 +1030,88 @@
             }
         }
 
+        // ============================================
+        // Transliteration: Hindi to Urdu Script
+        // ============================================
+        
+        /**
+         * Converts Hindi (Devanagari script) text to Urdu (Nastaliq/Arabic script)
+         * This function transliterates Devanagari characters to their Urdu equivalents
+         * Used as a workaround on iOS where Urdu speech recognition is not supported
+         * 
+         * @param {string} hindiText - Text in Hindi/Devanagari script
+         * @returns {string} Text converted to Urdu/Nastaliq script
+         */
+        function convertHindiToUrdu(hindiText) {
+            if (!hindiText || !hindiText.trim()) {
+                return hindiText;
+            }
+            
+            // Comprehensive Devanagari to Urdu/Arabic character mapping
+            // Maps Hindi consonants, vowels, and matras to Urdu equivalents
+            const devanagariToUrdu = {
+                // Vowels (independent)
+                'अ': 'ا', 'आ': 'آ', 'इ': 'اِ', 'ई': 'اِی', 'उ': 'اُ', 'ऊ': 'اُو',
+                'ऋ': 'ر', 'ए': 'ے', 'ऐ': 'ے', 'ओ': 'و', 'औ': 'و',
+                
+                // Vowel signs (matras)
+                'ा': 'ا', 'ि': 'ِ', 'ी': 'ی', 'ु': 'ُ', 'ू': 'و', 
+                'े': 'ے', 'ै': 'ے', 'ो': 'و', 'ौ': 'و',
+                'ं': 'ں', 'ः': '', '्': '', '़': '',
+                
+                // Consonants
+                'क': 'ک', 'ख': 'کھ', 'ग': 'گ', 'घ': 'گھ', 'ङ': 'نگ',
+                'च': 'چ', 'छ': 'چھ', 'ज': 'ج', 'झ': 'جھ', 'ञ': 'نج',
+                'ट': 'ٹ', 'ठ': 'ٹھ', 'ड': 'ڈ', 'ढ': 'ڈھ', 'ण': 'ن',
+                'त': 'ت', 'थ': 'تھ', 'द': 'د', 'ध': 'دھ', 'न': 'ن',
+                'प': 'پ', 'फ': 'پھ', 'ब': 'ب', 'भ': 'بھ', 'म': 'م',
+                'य': 'ی', 'र': 'ر', 'ल': 'ل', 'व': 'و', 'श': 'ش',
+                'ष': 'ش', 'स': 'س', 'ह': 'ہ', 'क्ष': 'کش', 'त्र': 'تر', 'ज्ञ': 'ج',
+                
+                // Numbers
+                '०': '۰', '१': '۱', '२': '۲', '३': '۳', '४': '۴',
+                '५': '۵', '६': '۶', '७': '۷', '८': '۸', '९': '۹',
+            };
+            
+            // Common word mappings for better accuracy
+            const wordMappings = {
+                'है': 'ہے', 'हो': 'ہو', 'में': 'میں', 'से': 'سے', 'को': 'کو',
+                'का': 'کا', 'की': 'کی', 'के': 'کے', 'और': 'اور', 'या': 'یا',
+                'नहीं': 'نہیں', 'हैं': 'ہیں', 'था': 'تھا', 'थी': 'تھی', 'थे': 'تھے',
+                'मैं': 'میں', 'तुम': 'تم', 'वह': 'وہ', 'यह': 'یہ', 'हम': 'ہم',
+                'क्या': 'کیا', 'कहाँ': 'کہاں', 'कब': 'کب', 'कैसे': 'کیسے', 'क्यों': 'کیوں'
+            };
+            
+            let urduText = hindiText;
+            
+            // First, try word-level mappings for common words
+            for (const [hindiWord, urduWord] of Object.entries(wordMappings)) {
+                const regex = new RegExp(hindiWord, 'g');
+                urduText = urduText.replace(regex, urduWord);
+            }
+            
+            // Then, convert remaining Devanagari characters
+            let result = '';
+            for (let i = 0; i < urduText.length; i++) {
+                const char = urduText[i];
+                
+                // Check if character is in mapping
+                if (devanagariToUrdu[char]) {
+                    result += devanagariToUrdu[char];
+                } else {
+                    // Keep non-Devanagari characters as-is (spaces, punctuation, already converted Urdu, etc.)
+                    result += char;
+                }
+            }
+            
+            // Post-processing: Clean up common issues
+            result = result.replace(/\s+/g, ' '); // Normalize spaces
+            result = result.replace(/ا\s+ی/g, 'ای'); // Fix spacing issues
+            result = result.replace(/ا\s+و/g, 'او');
+            
+            return result.trim();
+        }
+        
         // ============================================
         // Language Toggle
         // ============================================
