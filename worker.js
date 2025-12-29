@@ -308,47 +308,70 @@ async function handleChat(request, env) {
             : `You are a friendly, curious, and genuinely interested human having a natural conversation. Speak like you're talking to a friend - be warm, conversational, and show real interest. When someone shares something, acknowledge it naturally and ask relevant follow-up questions. Always keep the conversation flowing by asking questions like "What was that like?" "What happened next?" "Tell me more about that" "When did that happen?" "How did that make you feel?" If the conversation seems to be stopping, immediately ask a relevant follow-up question to keep it going. Be human-like in your responses - use natural language, show empathy, and be genuinely curious about their stories.`;
 
         // Build conversation history for context
-        let conversationContext = systemPrompt + '\n\n';
-        
-        // Add recent conversation history (last 10 messages for context)
-        const recentHistory = conversationHistory.slice(-10);
-        for (const msg of recentHistory) {
-            conversationContext += `Human: ${msg.user}\nAI: ${msg.ai}\n\n`;
-        }
-        
-        conversationContext += `Human: ${message}\nAI:`;
+        // Use last 5-7 messages for better context (not too long)
+        const recentHistory = conversationHistory.slice(-7);
 
         // Use Hugging Face Inference API (FREE, no API key needed for basic models)
-        // Using a conversational model that works well
-        const modelName = 'microsoft/DialoGPT-medium'; // Free, no auth required
+        // Using better conversational models - try multiple options for best quality
+        // Priority: BlenderBot (best for conversations) > DialoGPT-large > DialoGPT-medium
+        const modelOptions = [
+            'facebook/blenderbot-400M-distill',  // Best free conversational model
+            'microsoft/DialoGPT-large',          // Larger, better quality
+            'microsoft/DialoGPT-medium'         // Fallback
+        ];
         
-        try {
-            const response = await fetch(`https://api-inference.huggingface.co/models/${modelName}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    inputs: {
-                        past_user_inputs: recentHistory.map(m => m.user).slice(-5),
-                        generated_responses: recentHistory.map(m => m.ai).slice(-5),
-                        text: message
-                    }
-                })
-            });
+        let aiResponse = '';
+        let lastError = null;
+        
+        // Try models in order of quality
+        for (const modelName of modelOptions) {
+            try {
+                const response = await fetch(`https://api-inference.huggingface.co/models/${modelName}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        inputs: {
+                            past_user_inputs: recentHistory.map(m => m.user).slice(-5),
+                            generated_responses: recentHistory.map(m => m.ai).slice(-5),
+                            text: message
+                        }
+                    })
+                });
 
-            let aiResponse = '';
-            
-            if (response.ok) {
-                const result = await response.json();
-                let rawResponse = result.generated_text || result[0]?.generated_text || '';
-                
-                // Post-process to ensure quality responses
-                aiResponse = enhanceAIResponse(rawResponse, message, language, conversationHistory);
-            } else {
-                // Fallback: Use a contextual response generator if API fails
-                aiResponse = generateFallbackResponse(message, language, conversationHistory);
+                if (response.ok) {
+                    const result = await response.json();
+                    let rawResponse = result.generated_text || result[0]?.generated_text || '';
+                    
+                    // Check if we got a valid response
+                    if (rawResponse && rawResponse.trim().length > 5) {
+                        // Post-process to ensure quality responses
+                        aiResponse = enhanceAIResponse(rawResponse, message, language, conversationHistory);
+                        break; // Success, stop trying other models
+                    }
+                } else if (response.status === 503) {
+                    // Model is loading, try next one
+                    const errorData = await response.json().catch(() => ({}));
+                    console.log(`Model ${modelName} is loading, trying next...`);
+                    continue;
+                } else {
+                    // Other error, try next model
+                    lastError = `HTTP ${response.status}`;
+                    continue;
+                }
+            } catch (error) {
+                console.log(`Error with model ${modelName}:`, error.message);
+                lastError = error.message;
+                continue; // Try next model
             }
+        }
+        
+        // If all models failed, use fallback
+        if (!aiResponse || aiResponse.trim().length < 5) {
+            console.log('All AI models failed, using fallback response generator');
+            aiResponse = generateFallbackResponse(message, language, conversationHistory);
+        }
 
             // Save conversation to database
             const timestamp = new Date().toISOString();
@@ -422,42 +445,21 @@ async function handleChat(request, env) {
                 console.error('Database not available! env.DB is:', env.DB);
             }
 
-            return new Response(
-                JSON.stringify({
-                    success: true,
-                    response: aiResponse,
-                    sessionId: session,
-                    timestamp
-                }),
-                {
-                    status: 200,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        ...getCORSHeaders()
-                    }
+        return new Response(
+            JSON.stringify({
+                success: true,
+                response: aiResponse,
+                sessionId: session,
+                timestamp
+            }),
+            {
+                status: 200,
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...getCORSHeaders()
                 }
-            );
-        } catch (apiError) {
-            console.error('AI API error:', apiError);
-            // Fallback response
-            const fallbackResponse = generateFallbackResponse(message, language, conversationHistory);
-            
-            return new Response(
-                JSON.stringify({
-                    success: true,
-                    response: fallbackResponse,
-                    sessionId: sessionId || `session_${Date.now()}`,
-                    timestamp: new Date().toISOString()
-                }),
-                {
-                    status: 200,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        ...getCORSHeaders()
-                    }
-                }
-            );
-        }
+            }
+        );
     } catch (error) {
         console.error('Unexpected error in handleChat:', error);
         return new Response(
