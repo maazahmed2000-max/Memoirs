@@ -65,6 +65,11 @@ export default {
             return handleAdminQuery(request, env);
         }
 
+        // Test database connectivity (for debugging)
+        if (path === '/test-db' && request.method === 'GET') {
+            return handleTestDB(request, env);
+        }
+
         // Handle unknown routes
         return new Response(
             JSON.stringify({ 
@@ -366,14 +371,39 @@ async function handleChat(request, env) {
                     `).run();
 
                     // Save this conversation with person_id
-                    await env.DB.prepare(`
+                    const finalPersonId = (personId && personId !== 'default' && personId.trim() !== '') ? personId : 'default';
+                    
+                    console.log('Attempting to save conversation:', {
+                        personId: personId,
+                        finalPersonId: finalPersonId,
+                        message: message.substring(0, 50),
+                        hasDB: !!env.DB
+                    });
+                    
+                    const insertResult = await env.DB.prepare(`
                         INSERT INTO conversations (session_id, user_message, ai_response, language, timestamp, context, person_id)
                         VALUES (?, ?, ?, ?, ?, ?, ?)
-                    `).bind(session, message, aiResponse, language, timestamp, JSON.stringify(conversationHistory), (personId && personId !== 'default') ? personId : 'default').run();
+                    `).bind(session, message, aiResponse, language, timestamp, JSON.stringify(conversationHistory), finalPersonId).run();
+                    
+                    console.log('Conversation saved successfully:', {
+                        success: insertResult.success,
+                        meta: insertResult.meta,
+                        personId: finalPersonId,
+                        rowId: insertResult.meta?.last_row_id
+                    });
                 } catch (dbError) {
-                    console.error('Error saving conversation:', dbError);
-                    // Continue even if DB save fails
+                    console.error('ERROR saving conversation:', dbError);
+                    console.error('DB Error details:', {
+                        message: dbError.message,
+                        stack: dbError.stack,
+                        personId: personId,
+                        hasDB: !!env.DB,
+                        errorType: dbError.constructor.name
+                    });
+                    // Continue even if DB save fails - but log it
                 }
+            } else {
+                console.error('Database not available! env.DB is:', env.DB);
             }
 
             return new Response(
@@ -1037,6 +1067,71 @@ async function handleAdminQuery(request, env) {
         console.error('Error querying:', error);
         return new Response(
             JSON.stringify({ success: false, error: 'Internal server error', details: error.message }),
+            { status: 500, headers: { 'Content-Type': 'application/json', ...getCORSHeaders() } }
+        );
+    }
+}
+
+/**
+ * Test database connectivity endpoint
+ */
+async function handleTestDB(request, env) {
+    try {
+        if (!env.DB) {
+            return new Response(
+                JSON.stringify({ 
+                    success: false, 
+                    error: 'Database not configured. Check wrangler.jsonc database binding.' 
+                }),
+                { status: 500, headers: { 'Content-Type': 'application/json', ...getCORSHeaders() } }
+            );
+        }
+
+        // Try to create table
+        await env.DB.prepare(`
+            CREATE TABLE IF NOT EXISTS conversations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT,
+                user_message TEXT,
+                ai_response TEXT,
+                language TEXT,
+                timestamp TEXT,
+                context TEXT,
+                person_id TEXT
+            )
+        `).run();
+
+        // Try to query
+        const testQuery = await env.DB.prepare('SELECT COUNT(*) as count FROM conversations').first();
+        const count = testQuery?.count || 0;
+
+        // Try to insert a test record
+        const testInsert = await env.DB.prepare(`
+            INSERT INTO conversations (session_id, user_message, ai_response, language, timestamp, context, person_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).bind('test_session', 'test message', 'test response', 'en-US', new Date().toISOString(), '[]', 'test').run();
+
+        return new Response(
+            JSON.stringify({
+                success: true,
+                message: 'Database is working!',
+                details: {
+                    hasDB: !!env.DB,
+                    currentCount: count,
+                    testInsertSuccess: testInsert.success,
+                    testInsertId: testInsert.meta?.last_row_id
+                }
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json', ...getCORSHeaders() } }
+        );
+    } catch (error) {
+        return new Response(
+            JSON.stringify({
+                success: false,
+                error: 'Database test failed',
+                details: error.message,
+                stack: error.stack
+            }),
             { status: 500, headers: { 'Content-Type': 'application/json', ...getCORSHeaders() } }
         );
     }

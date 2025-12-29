@@ -589,11 +589,16 @@
             if (!message) return;
 
             // Check if person is set
-            if (!currentPersonName || currentPersonId === 'default') {
+            if (!currentPersonName || currentPersonId === 'default' || !currentPersonId || currentPersonId.trim() === '') {
                 alert('Please enter your name first before sending messages.');
-                setPerson(personInput.value || prompt('Enter your name:'));
+                const name = personInput.value || prompt('Enter your name:');
+                if (name) {
+                    setPerson(name);
+                }
                 return;
             }
+            
+            console.log('Sending message with personId:', currentPersonId, 'personName:', currentPersonName);
 
             // Clear any pending timers
             if (responseDelayTimer) {
@@ -707,6 +712,55 @@
             if (messageDiv) messageDiv.remove();
         }
 
+        // Convert Hindi Devanagari script to Urdu Nastaliq script
+        // This is needed because iOS speech recognition uses Hindi for Urdu
+        function convertHindiToUrdu(hindiText) {
+            if (!hindiText) return hindiText;
+            
+            // Check if text is already in Urdu/Arabic script - if so, return as-is
+            const urduArabicPattern = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
+            if (urduArabicPattern.test(hindiText)) {
+                return hindiText; // Already in Urdu script
+            }
+            
+            // Check if text contains Devanagari characters
+            const devanagariPattern = /[\u0900-\u097F]/;
+            if (!devanagariPattern.test(hindiText)) {
+                return hindiText; // Not Devanagari, return as-is
+            }
+            
+            // Common Devanagari to Urdu Nastaliq character mappings
+            const devanagariToUrdu = {
+                // Vowels
+                'अ': 'ا', 'आ': 'آ', 'इ': 'اِ', 'ई': 'اِی', 'उ': 'اُ', 'ऊ': 'اُو',
+                'ए': 'ے', 'ऐ': 'ے', 'ओ': 'و', 'औ': 'و',
+                // Consonants
+                'क': 'ک', 'ख': 'کھ', 'ग': 'گ', 'घ': 'گھ', 'ङ': 'ں',
+                'च': 'چ', 'छ': 'چھ', 'ज': 'ج', 'झ': 'جھ', 'ञ': 'ں',
+                'ट': 'ٹ', 'ठ': 'ٹھ', 'ड': 'ڈ', 'ढ': 'ڈھ', 'ण': 'ن',
+                'त': 'ت', 'थ': 'تھ', 'द': 'د', 'ध': 'دھ', 'न': 'ن',
+                'प': 'پ', 'फ': 'پھ', 'ब': 'ب', 'भ': 'بھ', 'म': 'م',
+                'य': 'ی', 'र': 'ر', 'ल': 'ل', 'व': 'و', 'श': 'ش',
+                'ष': 'ش', 'स': 'س', 'ह': 'ہ', 'क्ष': 'کش', 'त्र': 'تر', 'ज्ञ': 'گن',
+                // Diacritics
+                'ा': 'ا', 'ि': 'ِ', 'ी': 'ی', 'ु': 'ُ', 'ू': 'و', 'े': 'ے', 'ै': 'ے', 'ो': 'و', 'ौ': 'و',
+                '्': '', 'ं': 'ں', 'ः': '', '़': ''
+            };
+            
+            // Simple character-by-character conversion
+            let urduText = '';
+            for (let i = 0; i < hindiText.length; i++) {
+                const char = hindiText[i];
+                if (devanagariToUrdu[char]) {
+                    urduText += devanagariToUrdu[char];
+                } else {
+                    urduText += char; // Keep non-Devanagari characters as-is (spaces, punctuation, etc.)
+                }
+            }
+            
+            return urduText || hindiText; // Return converted or original if conversion failed
+        }
+
         // Text-to-Speech function for AI responses
         function speakText(text) {
             // Stop any current speech
@@ -734,9 +788,15 @@
             // Try to use a natural-sounding voice
             const voices = window.speechSynthesis.getVoices();
             if (currentLanguage === 'ur-PK') {
-                // Try to find Urdu voice, fallback to default
-                const urduVoice = voices.find(v => v.lang.startsWith('ur') || v.lang.startsWith('hi'));
-                if (urduVoice) utterance.voice = urduVoice;
+                // Try to find Urdu voice first, then Hindi as fallback
+                const urduVoice = voices.find(v => v.lang.startsWith('ur'));
+                if (urduVoice) {
+                    utterance.voice = urduVoice;
+                } else {
+                    // Fallback to Hindi voice if Urdu not available
+                    const hindiVoice = voices.find(v => v.lang.startsWith('hi'));
+                    if (hindiVoice) utterance.voice = hindiVoice;
+                }
             } else {
                 // Try to find a natural English voice
                 const englishVoice = voices.find(v => 
@@ -784,7 +844,9 @@
                 }
 
             const recognition = new SpeechRecognition();
-            recognition.lang = currentLanguage === 'ur-PK' ? 'hi-IN' : currentLanguage; // Use Hindi for Urdu on iOS
+            // Use Hindi recognition for Urdu on iOS (iOS doesn't support Urdu directly)
+            // The transcript will be converted from Devanagari to Urdu Nastaliq script
+            recognition.lang = currentLanguage === 'ur-PK' ? 'hi-IN' : currentLanguage;
             recognition.continuous = false;
             recognition.interimResults = true;
 
@@ -812,6 +874,12 @@
                 for (let i = event.resultIndex; i < event.results.length; i++) {
                     transcript += event.results[i][0].transcript;
                 }
+                
+                // If using Urdu language, convert Hindi Devanagari to Urdu Nastaliq
+                if (currentLanguage === 'ur-PK') {
+                    transcript = convertHindiToUrdu(transcript);
+                }
+                
                 messageInput.value = transcript;
                 pendingMessage = transcript.trim();
                 
