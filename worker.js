@@ -498,34 +498,6 @@ function generateContextualQuestion(message, language, history) {
 function generateFallbackResponse(message, language, history) {
     return generateContextualQuestion(message, language, history);
 }
-    const msg = message.toLowerCase();
-    
-    if (language === 'ur-PK') {
-        // Urdu responses
-        if (msg.includes('ہیلو') || msg.includes('سلام')) {
-            return 'سلام! آپ کیسے ہیں؟ آپ مجھے اپنی زندگی کے بارے میں کچھ بتائیں۔';
-        }
-        if (msg.includes('کہانی') || msg.includes('یاد')) {
-            return 'یہ بہت دلچسپ لگ رہا ہے! براہ کرم مزید تفصیلات بتائیں۔ کیا آپ اس وقت کے بارے میں مزید بتا سکتے ہیں؟';
-        }
-        if (msg.includes('خاندان') || msg.includes('گھر')) {
-            return 'آپ کے خاندان کے بارے میں مزید بتائیں۔ آپ کہاں رہتے تھے؟';
-        }
-        return 'یہ بہت دلچسپ ہے! براہ کرم مزید بتائیں۔ میں سن رہا ہوں۔';
-    } else {
-        // English responses
-        if (msg.includes('hello') || msg.includes('hi')) {
-            return 'Hello! How are you? Tell me about yourself and your life.';
-        }
-        if (msg.includes('story') || msg.includes('remember') || msg.includes('when')) {
-            return 'That sounds interesting! Can you tell me more details? What else happened?';
-        }
-        if (msg.includes('family') || msg.includes('home') || msg.includes('childhood')) {
-            return 'Tell me more about your family. Where did you grow up?';
-        }
-        return 'That\'s fascinating! Please tell me more. I\'m listening.';
-    }
-}
 
 /**
  * Handles GET /conversations endpoint
