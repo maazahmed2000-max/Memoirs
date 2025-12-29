@@ -104,53 +104,98 @@
         }
 
         .input-area {
-            padding: 20px;
+            padding: 30px 20px;
             background: white;
             border-top: 2px solid #eee;
             display: flex;
-            gap: 10px;
+            flex-direction: column;
+            gap: 15px;
             align-items: center;
         }
 
-        .input-group {
-            flex: 1;
+        /* Main microphone button - prominent and centered */
+        .btn-mic {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-size: 3.5rem;
+            padding: 30px;
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
             display: flex;
-            gap: 10px;
+            align-items: center;
+            justify-content: center;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-mic:hover {
+            transform: translateY(-3px) scale(1.05);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.5);
+        }
+
+        .btn-mic.recording {
+            background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
+            animation: pulse 1.5s infinite;
+            box-shadow: 0 6px 20px rgba(244, 67, 54, 0.5);
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 6px 20px rgba(244, 67, 54, 0.5); }
+            50% { transform: scale(1.1); box-shadow: 0 8px 30px rgba(244, 67, 54, 0.7); }
+        }
+
+        /* Typing input - secondary, collapsible */
+        .input-group {
+            width: 100%;
+            max-width: 500px;
+            display: flex;
+            gap: 8px;
+            opacity: 0.6;
+            transition: opacity 0.3s;
+            position: relative;
+        }
+
+        .input-group:hover,
+        .input-group:focus-within {
+            opacity: 1;
         }
 
         .input-group input {
             flex: 1;
-            padding: 15px 20px;
-            border: 2px solid #ddd;
-            border-radius: 25px;
-            font-size: 1rem;
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            border-radius: 20px;
+            font-size: 0.9rem;
             font-family: inherit;
+            background: #f9f9f9;
         }
 
         .input-group input:focus {
             outline: none;
             border-color: #667eea;
+            background: white;
         }
 
         .btn {
-            padding: 15px 30px;
+            padding: 10px 20px;
             border: none;
-            border-radius: 25px;
-            font-size: 1rem;
-            font-weight: bold;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: normal;
             cursor: pointer;
             transition: all 0.3s;
         }
 
         .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            transform: translateY(-1px);
         }
 
         .btn:disabled {
-            opacity: 0.6;
+            opacity: 0.5;
             cursor: not-allowed;
-            transform: none;
         }
 
         .btn-send {
@@ -158,26 +203,70 @@
             color: white;
         }
 
-        .btn-mic {
-            background: #f44336;
-            color: white;
-            padding: 15px;
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
+        /* Toggle to show/hide typing input */
+        .toggle-typing {
+            font-size: 0.85rem;
+            color: #666;
+            cursor: pointer;
+            text-decoration: underline;
+            margin-top: -10px;
+        }
+
+        .toggle-typing:hover {
+            color: #667eea;
+        }
+
+        .input-group.hidden {
+            display: none;
+        }
+
+        .person-selector {
+            padding: 15px 20px;
+            background: #fff3cd;
+            border-bottom: 2px solid #ffc107;
             display: flex;
+            flex-direction: column;
+            gap: 10px;
             align-items: center;
-            justify-content: center;
         }
 
-        .btn-mic.recording {
-            background: #ff5722;
-            animation: pulse 1.5s infinite;
+        .person-selector label {
+            font-weight: bold;
+            font-size: 0.9rem;
+            color: #856404;
         }
 
-        @keyframes pulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.1); }
+        .person-input-group {
+            display: flex;
+            gap: 10px;
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .person-input-group input,
+        .person-input-group select {
+            flex: 1;
+            padding: 10px 15px;
+            border: 2px solid #ffc107;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-family: inherit;
+        }
+
+        .person-input-group input:focus,
+        .person-input-group select:focus {
+            outline: none;
+            border-color: #ff9800;
+        }
+
+        .person-input-group button {
+            padding: 10px 20px;
+            background: #ff9800;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: bold;
         }
 
         .language-selector {
@@ -239,25 +328,35 @@
             <p>Share your stories, memories, and experiences. I'm here to listen and remember.</p>
         </div>
 
+        <div class="person-selector" id="personSelector">
+            <label for="personInput">👤 Who is sharing their memories?</label>
+            <div class="person-input-group">
+                <input type="text" id="personInput" placeholder="Enter your name" />
+                <button id="setPersonBtn">Set</button>
+            </div>
+            <div id="currentPerson" style="margin-top: 5px; font-size: 0.9rem; color: #856404; font-weight: bold;"></div>
+        </div>
+
         <div class="language-selector">
             <button class="lang-btn active" id="lang-en">English</button>
             <button class="lang-btn" id="lang-ur">اردو (Urdu)</button>
         </div>
 
         <div class="chat-container" id="chatContainer">
-            <div class="message ai">
+            <div class="message ai" id="welcomeMessage">
                 <div class="message-bubble">
-                    Hello! I'm here to listen to your stories and memories. Tell me about yourself, your life, your experiences - anything you'd like to share. I'll ask questions to learn more about you. What would you like to talk about?
+                    👤 Please enter your name above to start. Each family member will have their own separate memory bank where all conversations are saved.
                 </div>
             </div>
         </div>
 
-        <div class="status" id="status">Ready to chat</div>
+        <div class="status" id="status">Tap the microphone to speak</div>
 
         <div class="input-area">
-            <button class="btn btn-mic" id="micBtn" title="Voice Input">🎤</button>
-            <div class="input-group">
-                <input type="text" id="messageInput" placeholder="Type your message or use voice..." />
+            <button class="btn-mic" id="micBtn" title="Tap to speak">🎤</button>
+            <div class="toggle-typing" id="toggleTyping">Or type instead</div>
+            <div class="input-group hidden" id="inputGroup">
+                <input type="text" id="messageInput" placeholder="Type your message..." />
                 <button class="btn btn-send" id="sendBtn">Send</button>
             </div>
         </div>
@@ -267,12 +366,41 @@
         // Configuration
         // UPDATE THIS with your actual Cloudflare Worker URL
         // Find it at: https://dash.cloudflare.com → Workers & Pages → Your Worker
-        const WORKER_URL = window.WORKER_URL || 'grandma-memory-worker.maazahmed2000.workers.dev';
+        const WORKER_URL = window.WORKER_URL || 'https://grandma-memory-worker.maazahmed2000.workers.dev';
         let currentLanguage = 'en-US';
         let sessionId = `session_${Date.now()}`;
         let conversationHistory = [];
         let isRecording = false;
         let currentRecognition = null;
+        let responseDelayTimer = null;
+        let pendingMessage = null;
+        const RESPONSE_DELAY_MS = 2500; // Wait 2.5 seconds after user stops speaking before responding
+        
+        // Get person from URL parameter (for private invite links)
+        // Example: ?person=grandma or ?personId=grandma
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlPersonId = urlParams.get('person') || urlParams.get('personId');
+        const urlPersonName = urlParams.get('name');
+        
+        // Set person from URL if provided, otherwise use localStorage
+        let currentPersonId = urlPersonId || localStorage.getItem('currentPersonId') || 'default';
+        let currentPersonName = urlPersonName || localStorage.getItem('currentPersonName') || '';
+        
+        // If person ID from URL, convert to name if name not provided
+        if (urlPersonId && !urlPersonName) {
+            // Convert person ID to readable name (e.g., "grandma" -> "Grandma")
+            currentPersonName = urlPersonId.split('-').map(word => 
+                word.charAt(0).toUpperCase() + word.slice(1)
+            ).join(' ');
+        }
+        
+        // Save to localStorage if set from URL
+        if (urlPersonId) {
+            localStorage.setItem('currentPersonId', currentPersonId);
+            if (currentPersonName) {
+                localStorage.setItem('currentPersonName', currentPersonName);
+            }
+        }
 
         // Speech Recognition Setup
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -285,6 +413,68 @@
         const statusDiv = document.getElementById('status');
         const langEnBtn = document.getElementById('lang-en');
         const langUrBtn = document.getElementById('lang-ur');
+        const personInput = document.getElementById('personInput');
+        const setPersonBtn = document.getElementById('setPersonBtn');
+        const currentPersonDiv = document.getElementById('currentPerson');
+        const toggleTyping = document.getElementById('toggleTyping');
+        const inputGroup = document.getElementById('inputGroup');
+
+        // Person/Profile Management
+        function setPerson(name) {
+            if (!name || !name.trim()) {
+                alert('Please enter a name');
+                return;
+            }
+            
+            const personId = name.trim().toLowerCase().replace(/\s+/g, '-');
+            currentPersonId = personId;
+            currentPersonName = name.trim();
+            
+            // Save to localStorage
+            localStorage.setItem('currentPersonId', currentPersonId);
+            localStorage.setItem('currentPersonName', currentPersonName);
+            
+            // Update URL with person parameter (for bookmarking/sharing)
+            const newUrl = new URL(window.location);
+            newUrl.searchParams.set('person', personId);
+            newUrl.searchParams.set('name', currentPersonName);
+            window.history.replaceState({}, '', newUrl);
+            
+            // Update UI
+            currentPersonDiv.textContent = `Currently: ${currentPersonName}`;
+            personInput.value = '';
+            
+            // Hide person selector if person is set (cleaner UI)
+            const personSelector = document.getElementById('personSelector');
+            if (personSelector) {
+                personSelector.style.display = 'none';
+            }
+            
+            // Clear chat and load this person's history
+            chatContainer.innerHTML = '';
+            conversationHistory = [];
+            sessionId = `session_${Date.now()}`;
+            loadHistory();
+            
+            // Show welcome message for this person
+            addMessage(
+                `Hello ${currentPersonName}! I'm here to listen to your stories and memories. Tell me about yourself, your life, your experiences - anything you'd like to share. What would you like to talk about?`,
+                'ai'
+            );
+        }
+
+        setPersonBtn.addEventListener('click', () => {
+            setPerson(personInput.value);
+        });
+
+        personInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                setPerson(personInput.value);
+            }
+        });
+
+        // Note: We don't load other people's names for privacy
+        // Each person only sees their own conversations
 
         // Language switching
         langEnBtn.addEventListener('click', () => {
@@ -305,16 +495,40 @@
         async function sendMessage() {
             const message = messageInput.value.trim();
             if (!message) return;
+            sendMessageFromVoice(message);
+            messageInput.value = '';
+        }
+
+        async function sendMessageFromVoice(message) {
+            if (!message) return;
+
+            // Check if person is set
+            if (!currentPersonName || currentPersonId === 'default') {
+                alert('Please enter your name first before sending messages.');
+                setPerson(personInput.value || prompt('Enter your name:'));
+                return;
+            }
+
+            // Clear any pending timers
+            if (responseDelayTimer) {
+                clearTimeout(responseDelayTimer);
+                responseDelayTimer = null;
+            }
 
             // Add user message to UI
             addMessage(message, 'user');
             messageInput.value = '';
+            pendingMessage = null;
+            
+            // Update status
+            statusDiv.textContent = 'AI is thinking...';
+            statusDiv.classList.remove('recording');
 
             // Show typing indicator
             const typingId = addMessage('...', 'ai', true);
 
             try {
-                // Send to chat API
+                // Send to chat API with person_id
                 const response = await fetch(`${WORKER_URL}/chat`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -322,7 +536,8 @@
                         message,
                         language: currentLanguage,
                         sessionId,
-                        conversationHistory
+                        conversationHistory,
+                        personId: currentPersonId
                     })
                 });
 
@@ -340,13 +555,18 @@
                         user: message,
                         ai: result.response
                     });
+                    
+                    // Reset status
+                    statusDiv.textContent = 'Tap the microphone to speak';
                 } else {
                     addMessage('Sorry, I encountered an error. Please try again.', 'ai');
+                    statusDiv.textContent = 'Tap the microphone to speak';
                 }
             } catch (error) {
                 console.error('Error sending message:', error);
                 removeMessage(typingId);
                 addMessage('Connection error. Please check your internet and try again.', 'ai');
+                statusDiv.textContent = 'Tap the microphone to speak';
             }
         }
 
@@ -388,8 +608,14 @@
             recognition.onstart = () => {
                 isRecording = true;
                 micBtn.classList.add('recording');
-                statusDiv.textContent = 'Listening...';
+                statusDiv.textContent = 'Listening... Speak now';
                 statusDiv.classList.add('recording');
+                pendingMessage = null;
+                // Clear any existing delay timer
+                if (responseDelayTimer) {
+                    clearTimeout(responseDelayTimer);
+                    responseDelayTimer = null;
+                }
             };
 
             recognition.onresult = (event) => {
@@ -398,13 +624,43 @@
                     transcript += event.results[i][0].transcript;
                 }
                 messageInput.value = transcript;
+                pendingMessage = transcript.trim();
+                
+                // Clear existing timer
+                if (responseDelayTimer) {
+                    clearTimeout(responseDelayTimer);
+                }
+                
+                // If user is still speaking (interim results), wait
+                const isFinal = event.results[event.results.length - 1].isFinal;
+                if (isFinal && pendingMessage) {
+                    // User stopped speaking, wait a bit before sending
+                    statusDiv.textContent = 'Processing...';
+                    responseDelayTimer = setTimeout(() => {
+                        if (pendingMessage) {
+                            sendMessageFromVoice(pendingMessage);
+                            pendingMessage = null;
+                        }
+                    }, RESPONSE_DELAY_MS);
+                }
             };
 
             recognition.onend = () => {
                 isRecording = false;
                 micBtn.classList.remove('recording');
-                statusDiv.textContent = 'Ready to chat';
-                statusDiv.classList.remove('recording');
+                
+                // If there's a pending message and no timer, send it immediately
+                // (user manually stopped recording)
+                if (pendingMessage && !responseDelayTimer) {
+                    statusDiv.textContent = 'Processing...';
+                    setTimeout(() => {
+                        sendMessageFromVoice(pendingMessage);
+                        pendingMessage = null;
+                    }, 500);
+                } else if (!pendingMessage) {
+                    statusDiv.textContent = 'Tap the microphone to speak';
+                    statusDiv.classList.remove('recording');
+                }
             };
 
             recognition.onerror = (event) => {
@@ -418,10 +674,28 @@
             currentRecognition = recognition;
         }
 
+        // Toggle typing input visibility
+        toggleTyping.addEventListener('click', () => {
+            inputGroup.classList.toggle('hidden');
+            if (!inputGroup.classList.contains('hidden')) {
+                messageInput.focus();
+                toggleTyping.textContent = 'Hide typing';
+            } else {
+                toggleTyping.textContent = 'Or type instead';
+            }
+        });
+
         // Event Listeners
         sendBtn.addEventListener('click', sendMessage);
         messageInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendMessage();
+            if (e.key === 'Enter') {
+                // Clear any pending delay timer
+                if (responseDelayTimer) {
+                    clearTimeout(responseDelayTimer);
+                    responseDelayTimer = null;
+                }
+                sendMessage();
+            }
         });
 
         micBtn.addEventListener('click', () => {
@@ -435,14 +709,15 @@
         // Load conversation history on page load
         async function loadHistory() {
             try {
-                const response = await fetch(`${WORKER_URL}/conversations?sessionId=${sessionId}`);
+                // Load conversations for current person
+                const response = await fetch(`${WORKER_URL}/conversations?personId=${currentPersonId}&limit=50`);
                 const result = await response.json();
                 
                 if (result.success && result.conversations.length > 0) {
                     // Clear initial message
                     chatContainer.innerHTML = '';
                     
-                    // Load conversations
+                    // Load conversations (they're already sorted by timestamp DESC, so reverse for display)
                     result.conversations.reverse().forEach(conv => {
                         addMessage(conv.user_message, 'user');
                         addMessage(conv.ai_response, 'ai');
@@ -457,8 +732,37 @@
             }
         }
 
-        // Initialize
-        loadHistory();
+        // Initialize - Auto-load if person is set via URL or localStorage
+        if (currentPersonName && currentPersonId !== 'default') {
+            // Update current person display
+            currentPersonDiv.textContent = `Currently: ${currentPersonName}`;
+            
+            // Person is already set, load their history
+            loadHistory();
+            
+            // Remove welcome message
+            const welcomeMsg = document.getElementById('welcomeMessage');
+            if (welcomeMsg) {
+                welcomeMsg.remove();
+            }
+            
+            // Hide person selector (they're already identified)
+            const personSelector = document.getElementById('personSelector');
+            if (personSelector) {
+                personSelector.style.display = 'none';
+            }
+            
+            // Update URL to include person parameter (for bookmarking)
+            const url = new URL(window.location);
+            if (!url.searchParams.get('person')) {
+                url.searchParams.set('person', currentPersonId);
+                url.searchParams.set('name', currentPersonName);
+                window.history.replaceState({}, '', url);
+            }
+        } else {
+            // Show prompt if no person set
+            currentPersonDiv.textContent = 'Please enter a name to start';
+        }
     </script>
 </body>
 </html>

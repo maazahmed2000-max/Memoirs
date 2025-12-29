@@ -7,8 +7,9 @@
  * 3. Storing complete conversation history
  * 
  * Database Schema:
- * - grandma_memories: id, text, language, timestamp
- * - conversations: id, user_message, ai_response, language, timestamp, session_id, context
+ * - grandma_memories: id, text, language, timestamp, person_id
+ * - conversations: id, user_message, ai_response, language, timestamp, session_id, context, person_id
+ * - people: id, name, created_at (optional table for managing people)
  */
 
 /**
@@ -44,6 +45,11 @@ export default {
         // Get conversation history
         if (path === '/conversations' && request.method === 'GET') {
             return handleGetConversations(request, env);
+        }
+
+        // Get all people/profiles
+        if (path === '/people' && request.method === 'GET') {
+            return handleGetPeople(request, env);
         }
 
         // Handle unknown routes
@@ -152,6 +158,7 @@ async function handleSave(request, env) {
         // Trim whitespace and limit length to prevent abuse
         const text = body.text.trim().substring(0, 10000); // Max 10,000 characters
         const language = body.language.trim().substring(0, 50); // Max 50 characters for language code
+        const personId = body.personId || 'default'; // Get person_id from request, default to 'default'
 
         // Insert into D1 database
         // The database table should be named 'grandma_memories' with columns:
@@ -159,12 +166,24 @@ async function handleSave(request, env) {
         // - text (TEXT)
         // - language (TEXT)
         // - timestamp (TEXT)
+        // - person_id (TEXT)
         try {
+            // Create table with person_id if it doesn't exist
+            await env.DB.prepare(`
+                CREATE TABLE IF NOT EXISTS grandma_memories (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    text TEXT,
+                    language TEXT,
+                    timestamp TEXT,
+                    person_id TEXT
+                )
+            `).run();
+
             const result = await env.DB.prepare(
-                `INSERT INTO grandma_memories (text, language, timestamp) 
-                 VALUES (?, ?, ?)`
+                `INSERT INTO grandma_memories (text, language, timestamp, person_id) 
+                 VALUES (?, ?, ?, ?)`
             )
-            .bind(text, language, timestamp)
+            .bind(text, language, timestamp, personId)
             .run();
 
             // Check if insertion was successful
@@ -256,7 +275,7 @@ async function handleChat(request, env) {
             );
         }
 
-        const { message, language = 'en-US', sessionId, conversationHistory = [] } = body;
+        const { message, language = 'en-US', sessionId, conversationHistory = [], personId } = body;
 
         if (!message || typeof message !== 'string') {
             return new Response(
@@ -325,15 +344,16 @@ async function handleChat(request, env) {
                             ai_response TEXT,
                             language TEXT,
                             timestamp TEXT,
-                            context TEXT
+                            context TEXT,
+                            person_id TEXT
                         )
                     `).run();
 
-                    // Save this conversation
+                    // Save this conversation with person_id
                     await env.DB.prepare(`
-                        INSERT INTO conversations (session_id, user_message, ai_response, language, timestamp, context)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    `).bind(session, message, aiResponse, language, timestamp, JSON.stringify(conversationHistory)).run();
+                        INSERT INTO conversations (session_id, user_message, ai_response, language, timestamp, context, person_id)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    `).bind(session, message, aiResponse, language, timestamp, JSON.stringify(conversationHistory), personId || 'default').run();
                 } catch (dbError) {
                     console.error('Error saving conversation:', dbError);
                     // Continue even if DB save fails
@@ -434,14 +454,25 @@ async function handleGetConversations(request, env) {
 
         const url = new URL(request.url);
         const sessionId = url.searchParams.get('sessionId');
+        const personId = url.searchParams.get('personId');
         const limit = parseInt(url.searchParams.get('limit') || '100');
 
         let query = 'SELECT * FROM conversations';
         let params = [];
+        let conditions = [];
 
         if (sessionId) {
-            query += ' WHERE session_id = ?';
+            conditions.push('session_id = ?');
             params.push(sessionId);
+        }
+
+        if (personId) {
+            conditions.push('person_id = ?');
+            params.push(personId);
+        }
+
+        if (conditions.length > 0) {
+            query += ' WHERE ' + conditions.join(' AND ');
         }
 
         query += ' ORDER BY timestamp DESC LIMIT ?';
@@ -464,6 +495,64 @@ async function handleGetConversations(request, env) {
         );
     } catch (error) {
         console.error('Error getting conversations:', error);
+        return new Response(
+            JSON.stringify({ success: false, error: 'Internal server error' }),
+            { status: 500, headers: { 'Content-Type': 'application/json', ...getCORSHeaders() } }
+        );
+    }
+}
+
+/**
+ * Handles GET /people endpoint
+ * Returns list of all people/profiles in the database
+ */
+async function handleGetPeople(request, env) {
+    try {
+        if (!env.DB) {
+            return new Response(
+                JSON.stringify({ success: false, error: 'Database not configured' }),
+                { status: 500, headers: { 'Content-Type': 'application/json', ...getCORSHeaders() } }
+            );
+        }
+
+        // Get unique people from conversations
+        const conversations = await env.DB.prepare(`
+            SELECT DISTINCT person_id 
+            FROM conversations 
+            WHERE person_id IS NOT NULL AND person_id != ''
+            ORDER BY person_id
+        `).all();
+
+        // Get unique people from memories
+        const memories = await env.DB.prepare(`
+            SELECT DISTINCT person_id 
+            FROM grandma_memories 
+            WHERE person_id IS NOT NULL AND person_id != ''
+            ORDER BY person_id
+        `).all();
+
+        // Combine and deduplicate
+        const peopleSet = new Set();
+        (conversations.results || []).forEach(row => peopleSet.add(row.person_id));
+        (memories.results || []).forEach(row => peopleSet.add(row.person_id));
+
+        const people = Array.from(peopleSet).map(id => ({ id, name: id }));
+
+        return new Response(
+            JSON.stringify({
+                success: true,
+                people: people
+            }),
+            {
+                status: 200,
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...getCORSHeaders()
+                }
+            }
+        );
+    } catch (error) {
+        console.error('Error getting people:', error);
         return new Response(
             JSON.stringify({ success: false, error: 'Internal server error' }),
             { status: 500, headers: { 'Content-Type': 'application/json', ...getCORSHeaders() } }
