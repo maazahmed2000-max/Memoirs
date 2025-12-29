@@ -421,9 +421,14 @@ async function handleChat(request, env) {
                     // Check if we got a valid response (at least 3 characters, not just punctuation)
                     if (rawResponse && rawResponse.length > 3 && rawResponse.match(/[a-zA-Z\u0600-\u06FF]/)) {
                         // Post-process to ensure quality responses
-                        aiResponse = enhanceAIResponse(rawResponse, message, language, conversationHistory);
-                        console.log(`Using response from ${modelName}`);
-                        break; // Success, stop trying other models
+                        const enhanced = enhanceAIResponse(rawResponse, message, language, conversationHistory);
+                        if (enhanced) {
+                            aiResponse = enhanced;
+                            console.log(`Using response from ${modelName}`);
+                            break; // Success, stop trying other models
+                        } else {
+                            console.log(`Model ${modelName} response was filtered out (generic), trying next...`);
+                        }
                     } else {
                         console.log(`Model ${modelName} returned empty/invalid response (${rawResponse.length} chars), trying next...`);
                     }
@@ -532,10 +537,26 @@ async function handleChat(request, env) {
                         ? 'آپ کے کام کے بارے میں مزید بتائیں؟'
                         : 'Tell me more about your work?';
                 } else {
-                    // Generic but contextual
-                    aiResponse = language === 'ur-PK'
-                        ? 'مجھے اس کے بارے میں مزید بتائیں؟'
-                        : 'Tell me more about that?';
+                    // Generate varied responses based on what was actually said
+                    const messageWords = message.toLowerCase().split(/\s+/);
+                    const hasQuestion = message.includes('?');
+                    
+                    if (hasQuestion) {
+                        // If they asked a question, acknowledge and ask them to elaborate
+                        aiResponse = language === 'ur-PK'
+                            ? 'یہ اچھا سوال ہے! آپ اس کے بارے میں کیا سوچتے ہیں؟'
+                            : 'That\'s a good question! What do you think about that?';
+                    } else if (messageWords.length < 5) {
+                        // Short statement - ask for more details
+                        aiResponse = language === 'ur-PK'
+                            ? 'وہ کیسا تھا؟'
+                            : 'What was that like?';
+                    } else {
+                        // Longer statement - acknowledge and continue conversation naturally
+                        aiResponse = language === 'ur-PK'
+                            ? 'یہ بہت دلچسپ ہے! پھر کیا ہوا؟'
+                            : 'That\'s interesting! What happened next?';
+                    }
                 }
             }
         }
@@ -642,10 +663,8 @@ async function handleChat(request, env) {
  */
 function enhanceAIResponse(rawResponse, userMessage, language, history) {
     if (!rawResponse || rawResponse.trim().length < 3) {
-        // Only if completely empty, use minimal fallback
-        return language === 'ur-PK' 
-            ? 'جی، میں یہاں ہوں۔ آپ کیا کہنا چاہتے ہیں؟'
-            : 'Yes, I\'m here. What would you like to tell me?';
+        // Return null to trigger contextual fallback instead of generic response
+        return null;
     }
     
     let response = rawResponse.trim();
@@ -653,9 +672,13 @@ function enhanceAIResponse(rawResponse, userMessage, language, history) {
     // Remove any obvious artifacts or incomplete sentences
     // Remove if it's just a single word that doesn't make sense
     if (response.split(/\s+/).length === 1 && response.length < 5) {
-        return language === 'ur-PK' 
-            ? 'مجھے مزید بتائیں؟'
-            : 'Tell me more?';
+        return null; // Use contextual fallback
+    }
+    
+    // Filter out generic "tell me more" responses - let contextual fallback handle it
+    const lowerResponse = response.toLowerCase();
+    if ((lowerResponse.includes('tell me more') || lowerResponse.includes('tell me about')) && response.length < 40) {
+        return null; // Filter out generic "tell me more" - use contextual fallback instead
     }
     
     // Clean up common model artifacts
@@ -988,8 +1011,19 @@ async function handleAdminAnalyze(request, env) {
             conversationsResult = { results: [] };
         }
 
-        // Get memories for this person
+        // Get memories for this person (ensure table exists)
         try {
+            // Ensure grandma_memories table exists (older deployments might not have it)
+            await env.DB.prepare(`
+                CREATE TABLE IF NOT EXISTS grandma_memories (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    text TEXT,
+                    language TEXT,
+                    timestamp TEXT,
+                    person_id TEXT
+                )
+            `).run();
+
             memoriesResult = await env.DB.prepare(
                 'SELECT * FROM grandma_memories WHERE person_id = ? ORDER BY timestamp ASC'
             ).bind(personId).all();
@@ -1146,12 +1180,252 @@ Provide your analysis as a comprehensive book-like narrative in JSON format:
             };
         } else {
             // Fallback: Generate comprehensive analysis from patterns
+            console.log('AI analysis API failed, using pattern-based analysis');
             return generateComprehensiveAnalysis(conversations, memories, allText);
         }
     } catch (error) {
         console.error('AI analysis error:', error);
-        return generateComprehensiveAnalysis(conversations, memories, allText);
+        console.error('Error details:', error.message, error.stack);
+        // Always return fallback analysis instead of failing
+        try {
+            return generateComprehensiveAnalysis(conversations, memories, allText);
+        } catch (fallbackError) {
+            console.error('Fallback analysis also failed:', fallbackError);
+            // Return minimal structure to prevent errors
+            return {
+                book: {
+                    title: `The Life Story of ${personId}`,
+                    introduction: `This biography is compiled from ${conversations.length} conversations and ${memories.length} memories.`,
+                    earlyLife: 'Early life details from conversations.',
+                    personality: 'Personality traits mentioned in conversations.',
+                    lifeJourney: 'Life events and experiences shared.',
+                    relationships: 'Relationships and family members mentioned.',
+                    values: 'Values and beliefs expressed.',
+                    stories: 'Stories and anecdotes shared.',
+                    themes: 'Key topics discussed.',
+                    conclusion: 'A life rich with experiences and stories.'
+                },
+                summary: `This person has shared ${conversations.length} conversations covering various aspects of their life.`,
+                topics: [],
+                personality: [],
+                lifeEvents: [],
+                relationships: [],
+                values: [],
+                stories: []
+            };
+        }
     }
+}
+
+/**
+ * Generates comprehensive book-like analysis when AI is unavailable
+ * Creates detailed narrative from conversations and memories
+ */
+function generateComprehensiveAnalysis(conversations, memories, allText) {
+    try {
+        // Extract key information from conversations and memories
+        const text = allText.toLowerCase();
+        const allEntries = [
+            ...conversations.map(c => ({ type: 'conversation', text: `${c.user_message} ${c.ai_response}`, date: c.timestamp })),
+            ...memories.map(m => ({ type: 'memory', text: m.text, date: m.timestamp }))
+        ].sort((a, b) => new Date(a.date) - new Date(b.date));
+        
+        // Extract topics, events, relationships
+        const topics = extractTopics(text);
+        const events = extractLifeEvents(text, allEntries);
+        const relationships = extractRelationships(text);
+        const personality = extractPersonality(text);
+        const values = extractValues(text);
+        const stories = extractStories(allEntries);
+        
+        // Build comprehensive book-like structure
+        const book = {
+            title: `The Life Story`,
+            introduction: buildIntroduction(conversations, memories, topics),
+            earlyLife: buildEarlyLifeSection(text, events),
+            personality: buildPersonalitySection(personality, text),
+            lifeJourney: buildLifeJourneySection(events, allEntries),
+            relationships: buildRelationshipsSection(relationships, text),
+            values: buildValuesSection(values, text),
+            stories: buildStoriesSection(stories),
+            themes: topics.join(', ') || 'Life experiences',
+            conclusion: buildConclusion(topics, personality, values)
+        };
+        
+        return {
+            book: book,
+            summary: book.introduction.substring(0, 300),
+            topics: topics.slice(0, 10),
+            personality: personality.slice(0, 10),
+            lifeEvents: events.slice(0, 15),
+            relationships: relationships.slice(0, 10),
+            values: values.slice(0, 8),
+            stories: stories.slice(0, 10)
+        };
+    } catch (error) {
+        console.error('Error in generateComprehensiveAnalysis:', error);
+        // Return minimal structure on error
+        return {
+            book: {
+                title: 'The Life Story',
+                introduction: `This biography is compiled from ${conversations.length} conversations and ${memories.length} memories.`,
+                earlyLife: 'Early life details from conversations.',
+                personality: 'Personality traits mentioned in conversations.',
+                lifeJourney: 'Life events and experiences shared.',
+                relationships: 'Relationships and family members mentioned.',
+                values: 'Values and beliefs expressed.',
+                stories: 'Stories and anecdotes shared.',
+                themes: 'Key topics discussed.',
+                conclusion: 'A life rich with experiences and stories.'
+            },
+            summary: `This person has shared ${conversations.length} conversations covering various aspects of their life.`,
+            topics: [],
+            personality: [],
+            lifeEvents: [],
+            relationships: [],
+            values: [],
+            stories: []
+        };
+    }
+}
+
+function extractTopics(text) {
+    const topicKeywords = {
+        'childhood': 'Childhood & Early Years',
+        'family': 'Family',
+        'work': 'Work & Career',
+        'school': 'Education',
+        'travel': 'Travel & Adventures',
+        'marriage': 'Marriage & Relationships',
+        'friends': 'Friendships',
+        'hobbies': 'Hobbies & Interests',
+        'health': 'Health & Wellness',
+        'religion': 'Religion & Spirituality'
+    };
+    
+    const found = [];
+    for (const [key, label] of Object.entries(topicKeywords)) {
+        if (text.includes(key)) found.push(label);
+    }
+    return found.length > 0 ? found : ['Life Experiences', 'Personal Stories'];
+}
+
+function extractLifeEvents(text, entries) {
+    const events = [];
+    const eventKeywords = ['born', 'graduated', 'married', 'moved', 'started', 'retired', 'traveled', 'met'];
+    
+    entries.forEach(entry => {
+        const entryText = entry.text.toLowerCase();
+        eventKeywords.forEach(keyword => {
+            if (entryText.includes(keyword)) {
+                const sentence = entry.text.split(/[.!?]/).find(s => s.toLowerCase().includes(keyword));
+                if (sentence) events.push(sentence.trim());
+            }
+        });
+    });
+    
+    return events.slice(0, 20);
+}
+
+function extractRelationships(text) {
+    const relationships = [];
+    const relKeywords = ['mother', 'father', 'wife', 'husband', 'son', 'daughter', 'brother', 'sister', 'friend', 'grandmother', 'grandfather'];
+    
+    relKeywords.forEach(keyword => {
+        if (text.includes(keyword)) {
+            relationships.push(keyword.charAt(0).toUpperCase() + keyword.slice(1));
+        }
+    });
+    
+    return [...new Set(relationships)];
+}
+
+function extractPersonality(text) {
+    const traits = [];
+    const traitKeywords = {
+        'kind': 'Kind',
+        'patient': 'Patient',
+        'curious': 'Curious',
+        'hardworking': 'Hardworking',
+        'loving': 'Loving',
+        'funny': 'Humorous',
+        'creative': 'Creative',
+        'brave': 'Brave',
+        'wise': 'Wise',
+        'generous': 'Generous'
+    };
+    
+    for (const [key, trait] of Object.entries(traitKeywords)) {
+        if (text.includes(key)) traits.push(trait);
+    }
+    
+    return traits.length > 0 ? traits : ['Thoughtful', 'Reflective'];
+}
+
+function extractValues(text) {
+    const values = [];
+    const valueKeywords = {
+        'family': 'Family',
+        'honesty': 'Honesty',
+        'hard work': 'Hard Work',
+        'education': 'Education',
+        'faith': 'Faith',
+        'respect': 'Respect',
+        'love': 'Love',
+        'tradition': 'Tradition'
+    };
+    
+    for (const [key, value] of Object.entries(valueKeywords)) {
+        if (text.includes(key)) values.push(value);
+    }
+    
+    return values.length > 0 ? values : ['Personal Growth', 'Connection'];
+}
+
+function extractStories(entries) {
+    // Extract longer entries as stories
+    return entries
+        .filter(e => e.text.length > 100)
+        .map(e => e.text.substring(0, 300))
+        .slice(0, 15);
+}
+
+function buildIntroduction(conversations, memories, topics) {
+    const totalEntries = conversations.length + memories.length;
+    return `This is a comprehensive biography compiled from ${totalEntries} conversations and ${memories.length} saved memories. The person shared stories about ${topics.slice(0, 3).join(', ')} and many other aspects of their life. This book captures their essence, experiences, and the wisdom they've gathered over the years.`;
+}
+
+function buildEarlyLifeSection(text, events) {
+    const earlyEvents = events.filter(e => e.toLowerCase().includes('child') || e.toLowerCase().includes('grew up') || e.toLowerCase().includes('school'));
+    if (earlyEvents.length > 0) {
+        return `Early life was marked by significant experiences: ${earlyEvents.slice(0, 3).join('. ')}. ${text.includes('childhood') ? 'Their childhood stories reveal a rich tapestry of memories and formative experiences.' : ''}`;
+    }
+    return 'Early life details were shared through conversations, revealing formative years and childhood experiences.';
+}
+
+function buildPersonalitySection(personality, text) {
+    return `This person demonstrates ${personality.slice(0, 5).join(', ')}. Their personality shines through in how they tell stories, interact with others, and reflect on their experiences.`;
+}
+
+function buildLifeJourneySection(events, entries) {
+    const chronological = entries.slice(0, 20).map(e => `[${new Date(e.date).getFullYear()}] ${e.text.substring(0, 150)}`).join('\n\n');
+    return `Life's journey unfolded through many chapters:\n\n${chronological}`;
+}
+
+function buildRelationshipsSection(relationships, text) {
+    return `Important relationships included ${relationships.slice(0, 5).join(', ')}. These connections shaped their life and provided support, love, and companionship throughout the years.`;
+}
+
+function buildValuesSection(values, text) {
+    return `Core values that guided their life include ${values.slice(0, 5).join(', ')}. These principles influenced their decisions and how they lived.`;
+}
+
+function buildStoriesSection(stories) {
+    return stories.map((story, i) => `Story ${i + 1}: ${story}...`).join('\n\n');
+}
+
+function buildConclusion(topics, personality, values) {
+    return `This biography captures the essence of a life well-lived, filled with ${topics.slice(0, 2).join(' and ')}, characterized by ${personality.slice(0, 2).join(' and ')}, and guided by values of ${values.slice(0, 2).join(' and ')}. Their stories and memories form a rich legacy.`;
 }
 
 /**
