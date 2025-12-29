@@ -1,14 +1,14 @@
 /**
  * Cloudflare Worker for Grandma Memories App
  * 
- * This worker handles saving transcribed text to a D1 SQLite database.
- * It provides a POST endpoint /save that accepts text and language data.
+ * This worker handles:
+ * 1. Saving transcribed text to a D1 SQLite database
+ * 2. Conversational AI for natural conversations and follow-up questions
+ * 3. Storing complete conversation history
  * 
  * Database Schema:
- * - id: INTEGER PRIMARY KEY AUTOINCREMENT
- * - text: TEXT (the transcribed text)
- * - language: TEXT (language code, e.g., 'en-US' or 'ur-PK')
- * - timestamp: TEXT (ISO 8601 timestamp, stored automatically)
+ * - grandma_memories: id, text, language, timestamp
+ * - conversations: id, user_message, ai_response, language, timestamp, session_id, context
  */
 
 /**
@@ -34,6 +34,16 @@ export default {
         // Route to appropriate handler
         if (path === '/save' && request.method === 'POST') {
             return handleSave(request, env);
+        }
+
+        // Conversational AI endpoint for natural conversations
+        if (path === '/chat' && request.method === 'POST') {
+            return handleChat(request, env);
+        }
+
+        // Get conversation history
+        if (path === '/conversations' && request.method === 'GET') {
+            return handleGetConversations(request, env);
         }
 
         // Handle unknown routes
@@ -225,6 +235,243 @@ function handleCORS() {
 }
 
 /**
+ * Handles the POST /chat endpoint
+ * Provides conversational AI for natural conversations with follow-up questions
+ * Uses free Hugging Face Inference API
+ * 
+ * @param {Request} request - The incoming POST request with user message
+ * @param {Object} env - Environment variables
+ * @returns {Promise<Response>} AI response
+ */
+async function handleChat(request, env) {
+    try {
+        // Parse request body
+        let body;
+        try {
+            body = await request.json();
+        } catch (error) {
+            return new Response(
+                JSON.stringify({ success: false, error: 'Invalid JSON' }),
+                { status: 400, headers: { 'Content-Type': 'application/json', ...getCORSHeaders() } }
+            );
+        }
+
+        const { message, language = 'en-US', sessionId, conversationHistory = [] } = body;
+
+        if (!message || typeof message !== 'string') {
+            return new Response(
+                JSON.stringify({ success: false, error: 'Missing message' }),
+                { status: 400, headers: { 'Content-Type': 'application/json', ...getCORSHeaders() } }
+            );
+        }
+
+        // Build conversation context for the AI
+        const systemPrompt = language === 'ur-PK' 
+            ? `آپ ایک دوستانہ، دلچسپ بات چیت کرنے والے AI ہیں جو کسی شخص کی زندگی، کہانیاں، اور شخصیت کے بارے میں جاننے میں دلچسپی رکھتے ہیں۔ قدرتی طور پر بات کریں، تفصیلی سوالات پوچھیں، اور ان کی کہانیوں کو یاد رکھیں۔`
+            : `You are a friendly, curious conversational AI interested in learning about a person's life, stories, and personality. Have natural conversations, ask detailed follow-up questions, and remember their stories.`;
+
+        // Build conversation history for context
+        let conversationContext = systemPrompt + '\n\n';
+        
+        // Add recent conversation history (last 10 messages for context)
+        const recentHistory = conversationHistory.slice(-10);
+        for (const msg of recentHistory) {
+            conversationContext += `Human: ${msg.user}\nAI: ${msg.ai}\n\n`;
+        }
+        
+        conversationContext += `Human: ${message}\nAI:`;
+
+        // Use Hugging Face Inference API (FREE, no API key needed for basic models)
+        // Using a conversational model that works well
+        const modelName = 'microsoft/DialoGPT-medium'; // Free, no auth required
+        
+        try {
+            const response = await fetch(`https://api-inference.huggingface.co/models/${modelName}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    inputs: {
+                        past_user_inputs: recentHistory.map(m => m.user).slice(-5),
+                        generated_responses: recentHistory.map(m => m.ai).slice(-5),
+                        text: message
+                    }
+                })
+            });
+
+            let aiResponse = '';
+            
+            if (response.ok) {
+                const result = await response.json();
+                aiResponse = result.generated_text || result[0]?.generated_text || 'I understand. Can you tell me more about that?';
+            } else {
+                // Fallback: Use a simple rule-based response if API fails
+                aiResponse = generateFallbackResponse(message, language, conversationHistory);
+            }
+
+            // Save conversation to database
+            const timestamp = new Date().toISOString();
+            const session = sessionId || `session_${Date.now()}`;
+            
+            if (env.DB) {
+                try {
+                    // Create conversations table if it doesn't exist
+                    await env.DB.prepare(`
+                        CREATE TABLE IF NOT EXISTS conversations (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            session_id TEXT,
+                            user_message TEXT,
+                            ai_response TEXT,
+                            language TEXT,
+                            timestamp TEXT,
+                            context TEXT
+                        )
+                    `).run();
+
+                    // Save this conversation
+                    await env.DB.prepare(`
+                        INSERT INTO conversations (session_id, user_message, ai_response, language, timestamp, context)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    `).bind(session, message, aiResponse, language, timestamp, JSON.stringify(conversationHistory)).run();
+                } catch (dbError) {
+                    console.error('Error saving conversation:', dbError);
+                    // Continue even if DB save fails
+                }
+            }
+
+            return new Response(
+                JSON.stringify({
+                    success: true,
+                    response: aiResponse,
+                    sessionId: session,
+                    timestamp
+                }),
+                {
+                    status: 200,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...getCORSHeaders()
+                    }
+                }
+            );
+        } catch (apiError) {
+            console.error('AI API error:', apiError);
+            // Fallback response
+            const fallbackResponse = generateFallbackResponse(message, language, conversationHistory);
+            
+            return new Response(
+                JSON.stringify({
+                    success: true,
+                    response: fallbackResponse,
+                    sessionId: sessionId || `session_${Date.now()}`,
+                    timestamp: new Date().toISOString()
+                }),
+                {
+                    status: 200,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...getCORSHeaders()
+                    }
+                }
+            );
+        }
+    } catch (error) {
+        console.error('Unexpected error in handleChat:', error);
+        return new Response(
+            JSON.stringify({ success: false, error: 'Internal server error' }),
+            { status: 500, headers: { 'Content-Type': 'application/json', ...getCORSHeaders() } }
+        );
+    }
+}
+
+/**
+ * Generates a fallback response when AI API is unavailable
+ * Uses simple pattern matching and context awareness
+ */
+function generateFallbackResponse(message, language, history) {
+    const msg = message.toLowerCase();
+    
+    if (language === 'ur-PK') {
+        // Urdu responses
+        if (msg.includes('ہیلو') || msg.includes('سلام')) {
+            return 'سلام! آپ کیسے ہیں؟ آپ مجھے اپنی زندگی کے بارے میں کچھ بتائیں۔';
+        }
+        if (msg.includes('کہانی') || msg.includes('یاد')) {
+            return 'یہ بہت دلچسپ لگ رہا ہے! براہ کرم مزید تفصیلات بتائیں۔ کیا آپ اس وقت کے بارے میں مزید بتا سکتے ہیں؟';
+        }
+        if (msg.includes('خاندان') || msg.includes('گھر')) {
+            return 'آپ کے خاندان کے بارے میں مزید بتائیں۔ آپ کہاں رہتے تھے؟';
+        }
+        return 'یہ بہت دلچسپ ہے! براہ کرم مزید بتائیں۔ میں سن رہا ہوں۔';
+    } else {
+        // English responses
+        if (msg.includes('hello') || msg.includes('hi')) {
+            return 'Hello! How are you? Tell me about yourself and your life.';
+        }
+        if (msg.includes('story') || msg.includes('remember') || msg.includes('when')) {
+            return 'That sounds interesting! Can you tell me more details? What else happened?';
+        }
+        if (msg.includes('family') || msg.includes('home') || msg.includes('childhood')) {
+            return 'Tell me more about your family. Where did you grow up?';
+        }
+        return 'That\'s fascinating! Please tell me more. I\'m listening.';
+    }
+}
+
+/**
+ * Handles GET /conversations endpoint
+ * Retrieves conversation history
+ */
+async function handleGetConversations(request, env) {
+    try {
+        if (!env.DB) {
+            return new Response(
+                JSON.stringify({ success: false, error: 'Database not configured' }),
+                { status: 500, headers: { 'Content-Type': 'application/json', ...getCORSHeaders() } }
+            );
+        }
+
+        const url = new URL(request.url);
+        const sessionId = url.searchParams.get('sessionId');
+        const limit = parseInt(url.searchParams.get('limit') || '100');
+
+        let query = 'SELECT * FROM conversations';
+        let params = [];
+
+        if (sessionId) {
+            query += ' WHERE session_id = ?';
+            params.push(sessionId);
+        }
+
+        query += ' ORDER BY timestamp DESC LIMIT ?';
+        params.push(limit);
+
+        const result = await env.DB.prepare(query).bind(...params).all();
+
+        return new Response(
+            JSON.stringify({
+                success: true,
+                conversations: result.results || []
+            }),
+            {
+                status: 200,
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...getCORSHeaders()
+                }
+            }
+        );
+    } catch (error) {
+        console.error('Error getting conversations:', error);
+        return new Response(
+            JSON.stringify({ success: false, error: 'Internal server error' }),
+            { status: 500, headers: { 'Content-Type': 'application/json', ...getCORSHeaders() } }
+        );
+    }
+}
+
+/**
  * Returns CORS headers for cross-origin requests
  * Allows requests from any origin (including GitHub Pages)
  * 
@@ -233,7 +480,7 @@ function handleCORS() {
 function getCORSHeaders() {
     return {
         'Access-Control-Allow-Origin': '*', // Allow all origins (GitHub Pages, localhost, etc.)
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         'Access-Control-Max-Age': '86400' // Cache preflight for 24 hours
     };
