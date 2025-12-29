@@ -4,6 +4,27 @@
 
 This guide explains how to access and analyze the saved conversation data. **Only you (the admin) can access this data** - regular users cannot see this.
 
+## 🎯 Quick Start: Use the Dashboard
+
+**The easiest way to access your data is through the web dashboard:**
+
+1. Open `admin.html` in your browser (or host it on GitHub Pages)
+2. Enter your admin secret (the one you set in Cloudflare Worker environment variables)
+3. Click "Login"
+4. Browse all people, view conversations, and run AI analysis!
+
+The dashboard provides:
+- ✅ Visual overview of all data
+- ✅ Click to view each person's conversations
+- ✅ AI-powered analysis with one click
+- ✅ Search conversations
+- ✅ Export data to JSON
+- ✅ Secure login (secret stored locally)
+
+**To use the dashboard:**
+- If using GitHub Pages: The dashboard will be at `https://your-username.github.io/Memoirs/admin.html`
+- Or just open `admin.html` locally in your browser
+
 ## Setup
 
 ### 1. Set Admin Secret

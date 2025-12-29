@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <title>Memory Conversations - Preserve Your Stories</title>
+    <title>Memory Conversations - Share Your Stories with Maaz</title>
     <style>
         * {
             margin: 0;
@@ -324,8 +324,8 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>💬 Memory Conversations</h1>
-            <p>Share your stories, memories, and experiences. I'm here to listen and remember.</p>
+            <h1>💬 Memory Conversations with Maaz</h1>
+            <p>Share your stories, memories, and experiences for Maaz to know you better while he stays busy. I'm here to listen and remember for him.</p>
     </div>
     
         <div class="person-selector" id="personSelector">
@@ -458,7 +458,7 @@
             
             // Show welcome message for this person
             addMessage(
-                `Hello ${currentPersonName}! I'm here to listen to your stories and memories. Tell me about yourself, your life, your experiences - anything you'd like to share. What would you like to talk about?`,
+                `Hello ${currentPersonName}! I'm here to listen to your stories and memories. Tell me about yourself, your life, your experiences - anything you'd like to share with Maaz. What would you like to talk about?`,
                 'ai'
             );
         }
@@ -560,7 +560,7 @@
                     });
                     
                     // Reset status (will be updated by speakText when it finishes)
-                } else {
+                                } else {
                     addMessage('Sorry, I encountered an error. Please try again.', 'ai');
                     statusDiv.textContent = 'Tap the microphone to speak';
                 }
@@ -658,9 +658,9 @@
                 window.speechSynthesis.onvoiceschanged = () => {
                     speakText(text); // Retry with loaded voices
                 };
-                return;
-            }
-            
+                    return;
+                }
+
             window.speechSynthesis.speak(utterance);
         }
 
@@ -668,8 +668,8 @@
         function startSpeechRecognition() {
             if (!SpeechRecognition) {
                 alert('Speech recognition not supported in your browser.');
-                        return;
-            }
+                    return;
+                }
 
             const recognition = new SpeechRecognition();
             recognition.lang = currentLanguage === 'ur-PK' ? 'hi-IN' : currentLanguage; // Use Hindi for Urdu on iOS
