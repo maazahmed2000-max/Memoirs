@@ -323,8 +323,9 @@ async function handleChat(request, env) {
         // Priority: Try simpler, more reliable models first
         const modelOptions = [
             'microsoft/DialoGPT-medium',         // Most reliable, works without auth
-            'microsoft/DialoGPT-large',        // Larger version
-            'facebook/blenderbot-400M-distill'  // May need different format
+            'microsoft/DialoGPT-large',          // Larger version
+            'facebook/blenderbot-400M-distill',  // May need different format
+            'gpt2'                                // Simple text generation as last resort
         ];
         
         let aiResponse = '';
@@ -333,18 +334,36 @@ async function handleChat(request, env) {
         // Try models in order of quality
         for (const modelName of modelOptions) {
             try {
+                // Build request body based on model type
+                let requestBody;
+                if (modelName === 'gpt2') {
+                    // GPT-2 uses simple text generation format
+                    const conversationText = recentHistory.map(h => `Human: ${h.user}\nAI: ${h.ai}`).join('\n\n') + `\n\nHuman: ${message}\nAI:`;
+                    requestBody = {
+                        inputs: conversationText,
+                        parameters: {
+                            max_new_tokens: 60,
+                            temperature: 0.7,
+                            return_full_text: false
+                        }
+                    };
+                } else {
+                    // Conversational models use dialogue format
+                    requestBody = {
+                        inputs: {
+                            past_user_inputs: recentHistory.map(m => m.user).slice(-5),
+                            generated_responses: recentHistory.map(m => m.ai).slice(-5),
+                            text: message
+                        }
+                    };
+                }
+                
                 const response = await fetch(`https://api-inference.huggingface.co/models/${modelName}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                body: JSON.stringify({
-                    inputs: {
-                        past_user_inputs: recentHistory.map(m => m.user).slice(-5),
-                        generated_responses: recentHistory.map(m => m.ai).slice(-5),
-                        text: message
-                    }
-                })
+                    body: JSON.stringify(requestBody)
                 });
 
                 if (response.ok) {
@@ -380,20 +399,33 @@ async function handleChat(request, env) {
                     else if (typeof result === 'string') {
                         rawResponse = result;
                     }
+                    // Format 7: GPT-2 style (array with generated_text)
+                    else if (Array.isArray(result) && result.length > 0) {
+                        if (result[0]?.generated_text) {
+                            rawResponse = result[0].generated_text;
+                            // Extract just the AI part if it contains "AI:"
+                            if (rawResponse.includes('AI:')) {
+                                rawResponse = rawResponse.split('AI:').pop().trim();
+                            }
+                        }
+                    }
                     
                     // Clean and check response
                     rawResponse = rawResponse ? String(rawResponse).trim() : '';
                     
+                    // Remove any leading/trailing quotes or punctuation artifacts
+                    rawResponse = rawResponse.replace(/^["'`]+|["'`]+$/g, '').trim();
+                    
                     console.log(`Extracted response from ${modelName}:`, rawResponse.substring(0, 100));
                     
-                    // Check if we got a valid response
-                    if (rawResponse && rawResponse.length > 3) {
+                    // Check if we got a valid response (at least 3 characters, not just punctuation)
+                    if (rawResponse && rawResponse.length > 3 && rawResponse.match(/[a-zA-Z\u0600-\u06FF]/)) {
                         // Post-process to ensure quality responses
                         aiResponse = enhanceAIResponse(rawResponse, message, language, conversationHistory);
                         console.log(`Using response from ${modelName}`);
                         break; // Success, stop trying other models
                     } else {
-                        console.log(`Model ${modelName} returned empty/invalid response, trying next...`);
+                        console.log(`Model ${modelName} returned empty/invalid response (${rawResponse.length} chars), trying next...`);
                     }
                 } else if (response.status === 503) {
                     // Model is loading, try next one
@@ -461,18 +493,50 @@ async function handleChat(request, env) {
             }
         }
         
-        // Final fallback - only if everything failed
+        // If still no response, generate contextual response based on conversation
         if (!aiResponse || aiResponse.trim().length < 3) {
-            console.log('All AI models failed, using minimal fallback');
-            // Minimal fallback - acknowledge based on what they said
-            if (message.toLowerCase().includes('hear') || message.toLowerCase().includes('there')) {
+            console.log('All AI models failed, generating contextual response from conversation');
+            
+            // Generate a contextual response based on what the user actually said
+            const lowerMessage = message.toLowerCase();
+            
+            // Handle specific questions naturally
+            if (lowerMessage.includes('hear') || lowerMessage.includes('there') || lowerMessage.includes('can you')) {
                 aiResponse = language === 'ur-PK'
-                    ? 'جی ہاں، میں آپ کو سن رہا ہوں!'
-                    : 'Yes, I can hear you!';
+                    ? 'جی ہاں، میں آپ کو سن رہا ہوں! آپ کیا کہنا چاہتے ہیں؟'
+                    : 'Yes, I can hear you! What would you like to tell me?';
+            } else if (lowerMessage.includes('hello') || lowerMessage.includes('hi') || lowerMessage.includes('hey')) {
+                aiResponse = language === 'ur-PK'
+                    ? 'ہیلو! آپ سے مل کر خوشی ہوئی۔ آپ مجھے اپنے بارے میں کچھ بتائیں۔'
+                    : 'Hello! Nice to meet you. Tell me about yourself.';
+            } else if (lowerMessage.includes('name')) {
+                const nameMatch = message.match(/(?:my name is|i'm|i am|میرا نام)\s+(\w+)/i);
+                const name = nameMatch ? nameMatch[1] : '';
+                aiResponse = language === 'ur-PK'
+                    ? name ? `آپ سے مل کر بہت خوشی ہوئی، ${name}! آپ کہاں رہتے ہیں؟` : 'آپ سے مل کر خوشی ہوئی! آپ کا نام کیا ہے؟'
+                    : name ? `Nice to meet you, ${name}! Where are you from?` : 'Nice to meet you! What\'s your name?';
             } else {
-                aiResponse = language === 'ur-PK'
-                    ? 'جی، میں یہاں ہوں۔ آپ کیا کہنا چاہتے ہیں؟'
-                    : 'Yes, I\'m here. What would you like to tell me?';
+                // Use conversation context to generate a follow-up question
+                const lastTopic = recentHistory.length > 0 ? recentHistory[recentHistory.length - 1].user.toLowerCase() : '';
+                
+                if (lastTopic.includes('childhood') || lastTopic.includes('grew up')) {
+                    aiResponse = language === 'ur-PK'
+                        ? 'آپ کے بچپن کے بارے میں مزید بتائیں؟'
+                        : 'Tell me more about your childhood?';
+                } else if (lastTopic.includes('family') || lastTopic.includes('parent')) {
+                    aiResponse = language === 'ur-PK'
+                        ? 'آپ کے خاندان کے بارے میں مزید بتائیں؟'
+                        : 'Tell me more about your family?';
+                } else if (lastTopic.includes('work') || lastTopic.includes('job')) {
+                    aiResponse = language === 'ur-PK'
+                        ? 'آپ کے کام کے بارے میں مزید بتائیں؟'
+                        : 'Tell me more about your work?';
+                } else {
+                    // Generic but contextual
+                    aiResponse = language === 'ur-PK'
+                        ? 'مجھے اس کے بارے میں مزید بتائیں؟'
+                        : 'Tell me more about that?';
+                }
             }
         }
 
