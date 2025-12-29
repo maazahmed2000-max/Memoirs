@@ -297,10 +297,10 @@ async function handleChat(request, env) {
             );
         }
 
-        // Build conversation context for the AI - Make it more curious and conversational
+        // Build conversation context for the AI - Make it like a curious, attentive child/grandchild/nephew
         const systemPrompt = language === 'ur-PK' 
-            ? `آپ ایک انتہائی متجسس، توجہ دینے والے سننے والے AI ہیں جو کسی شخص کی زندگی، کہانیاں، اور تجربات کے بارے میں گہری دلچسپی رکھتے ہیں۔ آپ کا مقصد صرف سننا نہیں بلکہ تفصیلات حاصل کرنا ہے۔ ہمیشہ سیاق و سباق کے مطابق سوالات پوچھیں، مزید تفصیلات طلب کریں، اور ان کی کہانیوں میں دلچسپی دکھائیں۔ "میں سن رہا ہوں" جیسے عام جوابات سے گریز کریں - بجائے اس کے، مخصوص، متجسس سوالات پوچھیں جو بات چیت کو آگے بڑھائیں۔`
-            : `You are an extremely curious, attentive listener AI deeply interested in learning about a person's life, stories, and experiences. Your goal is not just to listen but to actively seek details. Always ask contextual follow-up questions, request more specifics, and show genuine interest in their stories. Avoid generic responses like "I'm listening" or "yes" - instead, ask specific, curious questions that move the conversation forward. Be conversational, ask about feelings, details, people, places, and times. Show you're truly engaged by referencing what they've told you and building on it.`;
+            ? `آپ ایک متجسس، محبت کرنے والے بچے/پوتے/بھتیجے کی طرح بات کریں جو اپنے بزرگوں سے ان کی زندگی کے بارے میں جاننا چاہتا ہے۔ قدرتی طور پر بات کریں - اگر کوئی اپنا نام بتائے تو "آپ سے مل کر خوشی ہوئی!" کہیں، نہ کہ "یہ کس طرح کا تجربہ تھا؟" سادہ بیانات کا قدرتی جواب دیں۔ متجسس ہوں لیکن بچوں کی طرح - "وہ کیسا تھا؟" "پھر کیا ہوا؟" "مجھے مزید بتائیں!" جیسے سوالات پوچھیں۔`
+            : `You are like a curious, loving child/grandchild/nephew who wants to learn about your elder's life. Speak naturally - if someone says "my name is X", respond with "Nice to meet you, X! Tell me about yourself" not "What was that experience like?" Respond naturally to simple statements. Be curious but like a child - ask questions like "What was that like?" "What happened next?" "Tell me more!" Show genuine interest and respond contextually to what they're saying, not with generic questions.`;
 
         // Build conversation history for context
         let conversationContext = systemPrompt + '\n\n';
@@ -369,7 +369,7 @@ async function handleChat(request, env) {
                     await env.DB.prepare(`
                         INSERT INTO conversations (session_id, user_message, ai_response, language, timestamp, context, person_id)
                         VALUES (?, ?, ?, ?, ?, ?, ?)
-                    `).bind(session, message, aiResponse, language, timestamp, JSON.stringify(conversationHistory), personId || 'default').run();
+                    `).bind(session, message, aiResponse, language, timestamp, JSON.stringify(conversationHistory), (personId && personId !== 'default') ? personId : 'default').run();
                 } catch (dbError) {
                     console.error('Error saving conversation:', dbError);
                     // Continue even if DB save fails
@@ -459,48 +459,61 @@ function generateContextualQuestion(message, language, history) {
     const recentTopics = history.slice(-3).map(h => h.user.toLowerCase()).join(' ');
     
     if (language === 'ur-PK') {
-        // Urdu contextual questions
+        // Urdu contextual questions - natural like a child
+        if (msg.includes('میرا نام') || msg.includes('میں ہوں') || msg.match(/my name is|i am|i'm/)) {
+            const nameMatch = msg.match(/(?:میرا نام|میں ہوں|my name is|i am|i'm)\s+(\w+)/i);
+            const name = nameMatch ? nameMatch[1] : '';
+            return name ? `آپ سے مل کر بہت خوشی ہوئی، ${name}! آپ مجھے اپنے بارے میں کچھ بتائیں - آپ کہاں رہتے ہیں؟` : 'آپ سے مل کر خوشی ہوئی! آپ مجھے اپنے بارے میں کچھ بتائیں۔';
+        }
         if (msg.includes('بچپن') || msg.includes('بچپن میں') || recentTopics.includes('بچپن')) {
-            return 'آپ کے بچپن کی کون سی یاد آپ کے لیے سب سے قیمتی ہے؟ وہ کیا تھی؟';
+            return 'وہ کیا تھا؟ مجھے مزید بتائیں!';
         }
         if (msg.includes('خاندان') || msg.includes('والدین') || recentTopics.includes('خاندان')) {
-            return 'آپ کے خاندان کے بارے میں مزید بتائیں۔ آپ کے والدین کیا کرتے تھے؟';
+            return 'آپ کے خاندان کے بارے میں مزید بتائیں! آپ کے والدین کیا کرتے تھے؟';
         }
         if (msg.includes('شادی') || msg.includes('بیوی') || msg.includes('شوہر')) {
-            return 'آپ کی شادی کیسے ہوئی؟ آپ اپنے ساتھی سے کیسے ملے؟';
+            return 'وہ کیسا تھا؟ آپ اپنے ساتھی سے کیسے ملے؟';
         }
         if (msg.includes('کام') || msg.includes('ملازمت') || recentTopics.includes('کام')) {
-            return 'آپ نے یہ کام کیوں شروع کیا؟ اس میں آپ کا پسندیدہ حصہ کیا تھا؟';
+            return 'وہ کیسا تھا؟ آپ کو کیا پسند تھا؟';
         }
         if (msg.includes('سفر') || msg.includes('سفری') || recentTopics.includes('سفر')) {
-            return 'آپ نے کہاں سفر کیا؟ وہاں کیا دیکھا؟';
+            return 'وہاں کیا ہوا؟ مجھے مزید بتائیں!';
         }
-        return 'یہ بہت دلچسپ ہے! کیا آپ اس وقت کے بارے میں مزید بتا سکتے ہیں؟ آپ کیسا محسوس کر رہے تھے؟';
+        return 'وہ کیسا تھا؟ مجھے مزید بتائیں!';
     } else {
-        // English contextual questions
+        // English contextual questions - natural like a child/grandchild
+        if (msg.includes('my name is') || msg.includes("i'm") || msg.includes('i am')) {
+            const nameMatch = msg.match(/(?:my name is|i'm|i am)\s+(\w+)/i);
+            const name = nameMatch ? nameMatch[1] : '';
+            return name ? `Nice to meet you, ${name}! Tell me about yourself - where are you from?` : 'Nice to meet you! Tell me about yourself.';
+        }
+        if (msg.includes('hello') || msg.includes('hi') || msg.includes('hey')) {
+            return 'Hi! I\'m so happy to talk with you! Tell me about yourself - what\'s your name?';
+        }
         if (msg.includes('childhood') || msg.includes('grew up') || recentTopics.includes('childhood')) {
-            return 'What\'s your most cherished childhood memory? What made it special?';
+            return 'What was that like? Tell me more!';
         }
         if (msg.includes('family') || msg.includes('parents') || msg.includes('siblings') || recentTopics.includes('family')) {
-            return 'Tell me more about your family. What did your parents do? What were they like?';
+            return 'Tell me more about your family! What were your parents like?';
         }
         if (msg.includes('married') || msg.includes('spouse') || msg.includes('husband') || msg.includes('wife')) {
-            return 'How did you meet your spouse? What was your wedding like?';
+            return 'How did that happen? How did you meet?';
         }
         if (msg.includes('work') || msg.includes('job') || msg.includes('career') || recentTopics.includes('work')) {
-            return 'What did you enjoy most about your work? What challenges did you face?';
+            return 'What was that like? What did you enjoy?';
         }
         if (msg.includes('travel') || msg.includes('visited') || msg.includes('went to') || recentTopics.includes('travel')) {
-            return 'What was that place like? What did you see or experience there?';
+            return 'What happened there? Tell me more!';
         }
         if (msg.includes('school') || msg.includes('education') || msg.includes('learned') || recentTopics.includes('school')) {
-            return 'What was school like for you? Who was your favorite teacher?';
+            return 'What was school like? Who was your favorite teacher?';
         }
         if (msg.includes('friend') || msg.includes('friendship') || recentTopics.includes('friend')) {
-            return 'What made that friendship special? How did you meet?';
+            return 'What made them special? How did you meet?';
         }
-        // Generic but engaging question
-        return 'That\'s fascinating! What was that experience like for you? How did it make you feel?';
+        // Natural follow-up like a curious child
+        return 'That sounds interesting! Tell me more about that.';
     }
 }
 
@@ -731,11 +744,11 @@ async function handleAdminGetData(request, env) {
             memoriesResult = { results: [] };
         }
 
-        // Get all unique people
+        // Get all unique people (include 'default' and empty, but filter them out for display)
         let people = [];
         try {
-            const peopleResult = await env.DB.prepare('SELECT DISTINCT person_id FROM conversations').all();
-            people = peopleResult.results ? peopleResult.results.map(row => row.person_id).filter(id => id && id !== 'default') : [];
+            const peopleResult = await env.DB.prepare('SELECT DISTINCT person_id FROM conversations WHERE person_id IS NOT NULL AND person_id != \'\'').all();
+            people = peopleResult.results ? peopleResult.results.map(row => row.person_id) : [];
         } catch (dbError) {
             // Table might not exist yet
             console.error('Error querying people:', dbError);
