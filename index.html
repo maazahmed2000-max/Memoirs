@@ -3,13 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Language" content="en">
-    <!-- iOS Safari specific meta tags for better Urdu support -->
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="format-detection" content="telephone=no">
-    <title>Speech to Text - Simple Voice Recorder</title>
+    <title>Memory Conversations - Preserve Your Stories</title>
     <style>
-        /* Reset and base styles */
         * {
             margin: 0;
             padding: 0;
@@ -17,162 +13,138 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Nastaliq Urdu", "Noto Sans Arabic", "Al Bayan", "Geeza Pro", "Arial Unicode MS", Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Nastaliq Urdu", "Noto Sans Arabic", Arial, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
             display: flex;
             flex-direction: column;
-            align-items: center;
-            justify-content: center;
+            height: calc(100vh - 40px);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1rem;
+        }
+
+        .chat-container {
+            flex: 1;
+            overflow-y: auto;
             padding: 20px;
-            color: #333;
+            background: #f9f9f9;
         }
 
-        /* Under Construction Banner */
-        .construction-banner {
-            background: #ff9800;
-            color: #fff;
-            padding: 15px 20px;
-            text-align: center;
-            font-size: 1.1rem;
-            font-weight: bold;
-            width: 100%;
-            max-width: 800px;
-            border-radius: 10px 10px 0 0;
-            margin-bottom: 0;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-        }
-
-        /* Main container */
-        .container {
-            background: white;
-            border-radius: 0 0 20px 20px;
-            padding: 40px;
-            max-width: 800px;
-            width: 100%;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-        }
-
-        /* Title */
-        h1 {
-            text-align: center;
-            font-size: 2.5rem;
-            margin-bottom: 30px;
-            color: #667eea;
-        }
-
-        /* Language toggle section */
-        .language-section {
-            text-align: center;
-            margin-bottom: 30px;
-            padding: 20px;
-            background: #f5f5f5;
-            border-radius: 10px;
-        }
-
-        .language-section label {
-            font-size: 1.3rem;
-            font-weight: bold;
-            display: block;
-            margin-bottom: 15px;
-            color: #333;
-        }
-
-        .language-buttons {
+        .message {
+            margin-bottom: 20px;
             display: flex;
-            gap: 15px;
-            justify-content: center;
-            flex-wrap: wrap;
+            animation: fadeIn 0.3s;
         }
 
-        /* Language button */
-        .lang-btn {
-            padding: 15px 30px;
-            font-size: 1.2rem;
-            border: 3px solid #667eea;
-            background: white;
-            color: #667eea;
-            border-radius: 10px;
-            cursor: pointer;
-            transition: all 0.3s;
-            min-width: 150px;
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
-        .lang-btn:hover {
-            background: #f0f0f0;
-            transform: scale(1.05);
+        .message.user {
+            justify-content: flex-end;
         }
 
-        .lang-btn.active {
+        .message.ai {
+            justify-content: flex-start;
+        }
+
+        .message-bubble {
+            max-width: 70%;
+            padding: 15px 20px;
+            border-radius: 20px;
+            word-wrap: break-word;
+            line-height: 1.5;
+        }
+
+        .message.user .message-bubble {
             background: #667eea;
             color: white;
+            border-bottom-right-radius: 5px;
         }
 
-        /* Disabled language button state (when recording is active) */
-        .lang-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none;
-            background: #e0e0e0;
-            color: #999;
-            border-color: #ccc;
-        }
-
-        .lang-btn:disabled:hover {
-            background: #e0e0e0;
-            transform: none;
-        }
-
-        /* iOS Safari hint styling */
-        .ios-hint {
+        .message.ai .message-bubble {
             background: #e3f2fd;
-            color: #1565c0;
-            padding: 15px 20px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            font-size: 1rem;
-            line-height: 1.6;
-            border: 2px solid #90caf9;
-            text-align: left;
+            color: #1976d2;
+            border-bottom-left-radius: 5px;
         }
 
-        .ios-hint strong {
-            display: block;
-            margin-bottom: 8px;
-            font-size: 1.1rem;
+        .message[dir="rtl"] {
+            direction: rtl;
         }
 
-        /* Control buttons section */
-        .controls {
+        .message[dir="rtl"] .message-bubble {
+            text-align: right;
+        }
+
+        .input-area {
+            padding: 20px;
+            background: white;
+            border-top: 2px solid #eee;
             display: flex;
-            gap: 20px;
-            justify-content: center;
-            margin-bottom: 30px;
-            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
         }
 
-        /* Main action buttons - large for elderly users */
+        .input-group {
+            flex: 1;
+            display: flex;
+            gap: 10px;
+        }
+
+        .input-group input {
+            flex: 1;
+            padding: 15px 20px;
+            border: 2px solid #ddd;
+            border-radius: 25px;
+            font-size: 1rem;
+            font-family: inherit;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
         .btn {
-            padding: 25px 50px;
-            font-size: 1.8rem;
-            font-weight: bold;
+            padding: 15px 30px;
             border: none;
-            border-radius: 15px;
+            border-radius: 25px;
+            font-size: 1rem;
+            font-weight: bold;
             cursor: pointer;
             transition: all 0.3s;
-            min-width: 200px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-            white-space: normal; /* Allow text to wrap for bilingual labels */
-            line-height: 1.3; /* Better spacing for wrapped text */
         }
 
         .btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
-        }
-
-        .btn:active {
-            transform: translateY(0);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
         }
 
         .btn:disabled {
@@ -181,1035 +153,313 @@
             transform: none;
         }
 
-        /* Start button */
-        .btn-start {
+        .btn-send {
             background: #4CAF50;
             color: white;
         }
 
-        .btn-start:hover:not(:disabled) {
-            background: #45a049;
-        }
-
-        /* Stop button */
-        .btn-stop {
+        .btn-mic {
             background: #f44336;
             color: white;
-        }
-
-        .btn-stop:hover:not(:disabled) {
-            background: #da190b;
-        }
-
-        /* Status indicator */
-        .status {
-            text-align: center;
-            font-size: 1.3rem;
-            margin-bottom: 20px;
             padding: 15px;
-            border-radius: 10px;
-            font-weight: bold;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
-        .status.idle {
-            background: #e3f2fd;
-            color: #1976d2;
-        }
-
-        .status.listening {
-            background: #c8e6c9;
-            color: #2e7d32;
-            border: 3px solid #4caf50;
+        .btn-mic.recording {
+            background: #ff5722;
             animation: pulse 1.5s infinite;
-            font-size: 1.4rem; /* Slightly larger when recording */
         }
 
         @keyframes pulse {
-            0%, 100% { 
-                opacity: 1;
-                box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7);
-            }
-            50% { 
-                opacity: 0.9;
-                box-shadow: 0 0 0 10px rgba(76, 175, 80, 0);
-            }
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
         }
 
-        /* Transcription display area */
-        .transcription-area {
-            background: #f9f9f9;
-            border: 3px solid #ddd;
+        .language-selector {
+            padding: 15px 20px;
+            background: #f5f5f5;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            border-bottom: 2px solid #eee;
+        }
+
+        .lang-btn {
+            padding: 10px 20px;
+            border: 2px solid #667eea;
+            background: white;
+            color: #667eea;
             border-radius: 10px;
-            padding: 25px;
-            min-height: 200px;
-            max-height: 400px;
-            overflow-y: auto;
-            font-size: 1.3rem;
-            line-height: 1.6;
-            margin-bottom: 20px;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Nastaliq Urdu", "Noto Sans Arabic", "Al Bayan", "Geeza Pro", "Arial Unicode MS", Arial, sans-serif;
-            /* Support for Urdu text rendering on iOS */
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
-            text-rendering: optimizeLegibility;
+            cursor: pointer;
+            transition: all 0.3s;
         }
 
-        /* Urdu (RTL) text direction support */
-        .transcription-area[dir="rtl"] {
-            direction: rtl;
-            text-align: right;
-            unicode-bidi: bidi-override;
+        .lang-btn.active {
+            background: #667eea;
+            color: white;
         }
 
-        /* Mixed content (English + Urdu) support */
-        .transcription-area[dir="auto"] {
-            direction: auto;
-            unicode-bidi: plaintext;
-        }
-
-        .transcription-area:empty::before {
-            content: "Your transcribed text will appear here...";
-            color: #999;
-            font-style: italic;
-        }
-
-        /* Urdu-specific styling for better iOS rendering */
-        .transcription-area.urdu-text {
-            direction: rtl;
-            text-align: right;
-            font-family: -apple-system, BlinkMacSystemFont, "Noto Nastaliq Urdu", "Noto Sans Arabic", "Al Bayan", "Geeza Pro", "Arial Unicode MS", Arial, sans-serif;
-        }
-
-        /* Error message styling */
-        .error {
-            background: #ffebee;
-            color: #c62828;
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            font-size: 1.2rem;
-            border: 2px solid #ef5350;
+        .status {
             text-align: center;
-            white-space: pre-line; /* Preserve line breaks in error messages */
-            word-wrap: break-word; /* Break long words if needed */
+            padding: 10px;
+            font-size: 0.9rem;
+            color: #666;
         }
 
-        /* Responsive design for mobile */
+        .status.recording {
+            color: #f44336;
+            font-weight: bold;
+        }
+
         @media (max-width: 600px) {
-            h1 {
-                font-size: 2rem;
-            }
-
-            .construction-banner {
-                font-size: 0.9rem;
-                padding: 12px 15px;
-            }
-
             .container {
-                padding: 20px;
+                height: 100vh;
+                border-radius: 0;
             }
 
-            .btn {
+            .header h1 {
                 font-size: 1.5rem;
-                padding: 20px 40px;
-                min-width: 100%;
             }
 
-            .lang-btn {
-                min-width: 120px;
-                font-size: 1rem;
-                padding: 12px 20px;
+            .message-bubble {
+                max-width: 85%;
             }
-
-            .transcription-area {
-                font-size: 1.1rem;
-                min-height: 150px;
-            }
-
-            .ios-hint {
-                font-size: 0.9rem;
-                padding: 12px 15px;
-            }
-
-            .status.listening {
-                font-size: 1.2rem;
-            }
-        }
-
-        /* Accessibility: Focus indicators */
-        .btn:focus,
-        .lang-btn:focus {
-            outline: 3px solid #ff9800;
-            outline-offset: 2px;
         }
     </style>
 </head>
 <body>
-    <!-- Under Construction Banner -->
-    <div class="construction-banner">
-        ⚠️ This app is under construction and not finalized | یہ ایپ ابھی زیر تعمیر ہے اور حتمی نہیں ہے
-    </div>
-    
     <div class="container">
-        <h1>🎤 Speech to Text</h1>
+        <div class="header">
+            <h1>💬 Memory Conversations</h1>
+            <p>Share your stories, memories, and experiences. I'm here to listen and remember.</p>
+        </div>
 
-        <!-- Language Selection Section -->
-        <div class="language-section">
-            <label for="language-select">Select Language:</label>
-            <div class="language-buttons">
-                <button class="lang-btn active" id="lang-en" aria-label="Select English language">
-                    English (en-US)
-                </button>
-                <button class="lang-btn" id="lang-ur" aria-label="Select Urdu language">
-                    Urdu (ur-PK)
-                </button>
+        <div class="language-selector">
+            <button class="lang-btn active" id="lang-en">English</button>
+            <button class="lang-btn" id="lang-ur">اردو (Urdu)</button>
+        </div>
+
+        <div class="chat-container" id="chatContainer">
+            <div class="message ai">
+                <div class="message-bubble">
+                    Hello! I'm here to listen to your stories and memories. Tell me about yourself, your life, your experiences - anything you'd like to share. I'll ask questions to learn more about you. What would you like to talk about?
+                </div>
             </div>
         </div>
 
-        <!-- iOS Safari Permission Hint (shown only on iOS Safari) -->
-        <div id="ios-hint" class="ios-hint" style="display: none;" role="note" aria-label="iOS Safari instructions">
-            <strong>📱 iOS Safari Tips:</strong><br>
-            • Tap "Start Talking" to begin recording<br>
-            • Allow microphone permission when prompted<br>
-            • If microphone doesn't work, refresh the page
-        </div>
+        <div class="status" id="status">Ready to chat</div>
 
-        <!-- Status Display -->
-        <div class="status idle" id="status" role="status" aria-live="polite">
-            Ready to start
-        </div>
-
-        <!-- Error Display Area (hidden by default) -->
-        <div id="error-message" class="error" style="display: none;" role="alert"></div>
-
-        <!-- Control Buttons -->
-        <div class="controls">
-            <button class="btn btn-start" id="start-btn" aria-label="Start speech recognition">
-                🎤 Start Talking / بات شروع کریں
-            </button>
-            <button class="btn btn-stop" id="stop-btn" disabled aria-label="Stop speech recognition">
-                ⏹ Stop / روکیں
-            </button>
-        </div>
-
-        <!-- Transcription Display Area -->
-        <div class="transcription-area" id="transcription" role="log" aria-live="polite" aria-label="Transcribed text">
+        <div class="input-area">
+            <button class="btn btn-mic" id="micBtn" title="Voice Input">🎤</button>
+            <div class="input-group">
+                <input type="text" id="messageInput" placeholder="Type your message or use voice..." />
+                <button class="btn btn-send" id="sendBtn">Send</button>
+            </div>
         </div>
     </div>
 
     <script>
-        // ============================================
+        // Configuration
+        // UPDATE THIS with your actual Cloudflare Worker URL
+        // Find it at: https://dash.cloudflare.com → Workers & Pages → Your Worker
+        const WORKER_URL = window.WORKER_URL || 'grandma-memory-worker.maazahmed2000.workers.dev';
+        let currentLanguage = 'en-US';
+        let sessionId = `session_${Date.now()}`;
+        let conversationHistory = [];
+        let isRecording = false;
+        let currentRecognition = null;
+
         // Speech Recognition Setup
-        // ============================================
-        
-        // Check for browser support and get the SpeechRecognition API
-        // Different browsers use different prefixes
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        
-        // IMPORTANT FOR iOS SAFARI:
-        // We do NOT store the recognition object globally. Instead, we create a NEW
-        // SpeechRecognition object every time the user presses "Start Talking".
-        // This is required because iOS Safari has strict requirements:
-        // 1. A recognition object can only be started once per instance
-        // 2. The language must be set BEFORE calling start() - changing it after creation
-        //    but before start() may not work reliably on iOS
-        // 3. Reusing a recognition object that has ended will fail on iOS
-        // By creating a fresh object each time, we ensure iOS Safari compatibility.
-        
-        // Variable to store current language (not the recognition object)
-        let currentLanguage = 'en-US'; // Default language
-        
-        // Variable to track if we're using Hindi as a workaround for Urdu on iOS
-        let usingHindiWorkaround = false;
-        
-        // DOM element references
-        const startBtn = document.getElementById('start-btn');
-        const stopBtn = document.getElementById('stop-btn');
-        const transcriptionDiv = document.getElementById('transcription');
+
+        // DOM Elements
+        const chatContainer = document.getElementById('chatContainer');
+        const messageInput = document.getElementById('messageInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const micBtn = document.getElementById('micBtn');
         const statusDiv = document.getElementById('status');
-        const errorDiv = document.getElementById('error-message');
         const langEnBtn = document.getElementById('lang-en');
         const langUrBtn = document.getElementById('lang-ur');
-        const iosHintDiv = document.getElementById('ios-hint');
 
-        // ============================================
-        // Browser Support Check
-        // ============================================
-        
-        /**
-         * Checks if the browser supports speech recognition
-         * Displays an error message if not supported
-         */
-        function checkBrowserSupport() {
-            if (!SpeechRecognition) {
-                showError(
-                    'Speech recognition is not supported in your browser. ' +
-                    'Please use Chrome, Edge, or another Chromium-based browser.'
-                );
-                // Disable buttons if not supported
-                startBtn.disabled = true;
-                stopBtn.disabled = true;
-                return false;
-            }
-            return true;
-        }
+        // Language switching
+        langEnBtn.addEventListener('click', () => {
+            currentLanguage = 'en-US';
+            langEnBtn.classList.add('active');
+            langUrBtn.classList.remove('active');
+            messageInput.placeholder = 'Type your message or use voice...';
+        });
 
-        // ============================================
-        // Error Handling
-        // ============================================
-        
-        /**
-         * Detects if the user is on Safari (including iOS Safari)
-         * @returns {boolean} True if Safari, false otherwise
-         */
-        function isSafari() {
-            const userAgent = navigator.userAgent;
-            return /^((?!chrome|android).)*safari/i.test(userAgent) ||
-                   /iPad|iPhone|iPod/.test(userAgent);
-        }
+        langUrBtn.addEventListener('click', () => {
+            currentLanguage = 'ur-PK';
+            langUrBtn.classList.add('active');
+            langEnBtn.classList.remove('active');
+            messageInput.placeholder = 'اپنا پیغام ٹائپ کریں یا آواز استعمال کریں...';
+        });
 
-        /**
-         * Detects if the user is on iOS Safari specifically
-         * @returns {boolean} True if iOS Safari, false otherwise
-         */
-        function isIOSSafari() {
-            const userAgent = navigator.userAgent;
-            // Check for iOS devices (iPhone, iPad, iPod) and Safari
-            return (/iPad|iPhone|iPod/.test(userAgent) && 
-                    /Safari/.test(userAgent) && 
-                    !/CriOS|FxiOS|OPiOS/.test(userAgent)); // Exclude Chrome, Firefox, Opera on iOS
-        }
-        
-        /**
-         * Displays an error message to the user with error code and Safari advice
-         * @param {string} message - The error message to display
-         * @param {string} errorCode - The specific error code (e.g., 'service-not-allowed', 'not-allowed')
-         */
-        function showError(message, errorCode) {
-            let fullMessage = message;
-            
-            // Always show the error code if provided
-            if (errorCode) {
-                fullMessage += `\n\nError Code: ${errorCode}`;
-            }
-            
-            // Add Safari-specific advice for certain errors
-            if (isSafari() && errorCode) {
-                const safariErrors = ['service-not-allowed', 'not-allowed', 'aborted', 'network'];
-                if (safariErrors.includes(errorCode)) {
-                    fullMessage += '\n\n💡 Safari Tip: If this error persists, try refreshing the page and allowing microphone access when prompted.';
-                }
-            } else if (isSafari()) {
-                // General Safari advice if no specific error code
-                fullMessage += '\n\n💡 Safari Tip: If you continue to experience issues, try refreshing the page.';
-            }
-            
-            // Add contact information for Maaz in English and Urdu
-            fullMessage += '\n\n📧 Contact for Support:';
-            fullMessage += '\nEnglish: If you encounter any errors, please contact Maaz for assistance.';
-            fullMessage += '\nUrdu: اگر کوئی خرابی آئے تو براہ کرم معاذ سے رابطہ کریں۔';
-            
-            // Safely update error display - wrap in try-catch to prevent crashes
+        // Send message
+        async function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message) return;
+
+            // Add user message to UI
+            addMessage(message, 'user');
+            messageInput.value = '';
+
+            // Show typing indicator
+            const typingId = addMessage('...', 'ai', true);
+
             try {
-                errorDiv.textContent = fullMessage;
-                errorDiv.style.display = 'block';
-                statusDiv.textContent = 'Error occurred';
-                statusDiv.className = 'status idle';
-            } catch (e) {
-                // Fallback: use console if DOM update fails
-                console.error('Error displaying error message:', e);
-                console.error('Original error:', message, errorCode);
-            }
-        }
+                // Send to chat API
+                const response = await fetch(`${WORKER_URL}/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message,
+                        language: currentLanguage,
+                        sessionId,
+                        conversationHistory
+                    })
+                });
 
-        /**
-         * Hides the error message
-         */
-        function hideError() {
-            try {
-                errorDiv.style.display = 'none';
-            } catch (e) {
-                // Silently fail if DOM is not available
-                console.warn('Could not hide error message:', e);
-            }
-        }
+                const result = await response.json();
 
-        // ============================================
-        // Speech Recognition Initialization
-        // ============================================
-        
-        /**
-         * Creates and configures a NEW SpeechRecognition object
-         * IMPORTANT: This function creates a fresh object each time it's called.
-         * This is required for iOS Safari compatibility - recognition objects
-         * cannot be reused after they end.
-         * Enhanced with error handling to prevent crashes.
-         * 
-         * @returns {SpeechRecognition|null} A new recognition object or null if not supported
-         */
-        function createRecognitionObject() {
-            try {
-                if (!SpeechRecognition) {
-                    return null;
-                }
+                // Remove typing indicator
+                removeMessage(typingId);
 
-                // CRITICAL FOR iOS: Create a NEW recognition instance every time
-                // iOS Safari does not allow reusing recognition objects
-                let recognition;
-                try {
-                    recognition = new SpeechRecognition();
-                } catch (error) {
-                    console.error('Error creating SpeechRecognition object:', error);
-                    showError('Failed to create speech recognition. Please refresh the page.', 'creation-error');
-                    return null;
-                }
-                
-                // CRITICAL FOR iOS: Set language BEFORE calling start()
-                // The language must be set during object creation, not after
-                // iOS Safari does NOT support Urdu - use Hindi as workaround (iOS only)
-                try {
-                    let recognitionLanguage = currentLanguage;
-                    usingHindiWorkaround = false;
+                if (result.success) {
+                    // Add AI response
+                    addMessage(result.response, 'ai');
                     
-                    // iOS-specific workaround: Use Hindi for Urdu recognition
-                    // Hindi and Urdu are very similar, and iOS supports Hindi
-                    if (isIOSSafari() && currentLanguage === 'ur-PK') {
-                        // Use Hindi on iOS since Urdu is not supported
-                        // We'll convert the Hindi text to Urdu script for display
-                        recognitionLanguage = 'hi-IN';
-                        usingHindiWorkaround = true;
-                    } else {
-                        // On non-iOS platforms, use Urdu directly
-                        recognitionLanguage = currentLanguage;
-                    }
-                    
-                    recognition.lang = recognitionLanguage;
-                } catch (error) {
-                    console.warn('Error setting language, using default:', error);
-                    // Try to continue with default language
-                    try {
-                        recognition.lang = 'en-US';
-                    } catch (e) {
-                        console.error('Error setting default language:', e);
-                    }
-                }
-                
-                // Set recognition properties with error handling
-                try {
-                    recognition.continuous = true; // Keep listening until stopped
-                    recognition.interimResults = true; // Show results as user speaks
-                } catch (error) {
-                    console.warn('Error setting recognition properties:', error);
-                    // Continue anyway - these may have defaults
-                }
-
-            // ============================================
-            // Event Handlers for Speech Recognition
-            // ============================================
-            
-            /**
-             * Fired when recognition starts
-             * Enhanced with error handling to prevent crashes
-             */
-            recognition.onstart = function() {
-                try {
-                    // Clear status message and show active recording state
-                    statusDiv.textContent = '🔴 RECORDING - Speak now!';
-                    statusDiv.className = 'status listening';
-                    startBtn.disabled = true;
-                    stopBtn.disabled = false;
-                    hideError();
-                    // CRITICAL: Disable language toggle during recording
-                    // Changing language mid-session causes Safari failures
-                    disableLanguageToggle();
-                } catch (error) {
-                    console.error('Error in onstart handler:', error);
-                    // Try to at least update status and disable toggle
-                    try {
-                        statusDiv.textContent = '🔴 RECORDING';
-                        disableLanguageToggle();
-                    } catch (e) {
-                        console.error('Critical error updating status:', e);
-                    }
-                }
-            };
-
-            /**
-             * Fired when recognition produces a result
-             * Enhanced with error handling to prevent crashes
-             * @param {SpeechRecognitionEvent} event - The recognition event
-             */
-            recognition.onresult = function(event) {
-                try {
-                    let interimTranscript = '';
-                    let finalTranscript = '';
-
-                    // Safely process all results from the event
-                    try {
-                        if (!event || !event.results) {
-                            console.warn('Invalid recognition event:', event);
-                            return;
-                        }
-
-                        const startIndex = event.resultIndex || 0;
-                        const results = event.results || [];
-
-                        for (let i = startIndex; i < results.length; i++) {
-                            try {
-                                const result = results[i];
-                                if (!result || !result[0]) {
-                                    continue; // Skip invalid results
-                                }
-                                
-                                const transcript = result[0].transcript || '';
-                                
-                                // Check if this is a final or interim result
-                                if (result.isFinal) {
-                                    finalTranscript += transcript + ' ';
-                                } else {
-                                    interimTranscript += transcript;
-                                }
-                            } catch (e) {
-                                // Skip individual result if it's malformed
-                                console.warn('Error processing result at index', i, ':', e);
-                                continue;
-                            }
-                        }
-                    } catch (e) {
-                        console.error('Error processing recognition results:', e);
-                        // Don't update transcription if we can't process results
-                        return;
-                    }
-
-                    // Safely update the transcription display
-                    try {
-                        let displayText = finalTranscript + interimTranscript;
-                        
-                        // If we're using Hindi workaround for Urdu on iOS, convert to Urdu script
-                        if (usingHindiWorkaround && currentLanguage === 'ur-PK' && displayText.trim()) {
-                            // Convert Hindi (Devanagari) text to Urdu (Nastaliq/Arabic) script
-                            displayText = convertHindiToUrdu(displayText);
-                        }
-                        
-                        // For Urdu, ensure proper text direction and rendering
-                        if (currentLanguage === 'ur-PK') {
-                            transcriptionDiv.setAttribute('dir', 'rtl');
-                            transcriptionDiv.classList.add('urdu-text');
-                        } else {
-                            // English - LTR
-                            transcriptionDiv.removeAttribute('dir');
-                            transcriptionDiv.classList.remove('urdu-text');
-                        }
-                        
-                        transcriptionDiv.textContent = displayText;
-                        
-                        // Auto-scroll to bottom if content is long
-                        // For RTL, scroll to the right side (start)
-                        if (currentLanguage === 'ur-PK') {
-                            transcriptionDiv.scrollLeft = 0;
-                        }
-                        transcriptionDiv.scrollTop = transcriptionDiv.scrollHeight;
-                    } catch (e) {
-                        console.error('Error updating transcription display:', e);
-                    }
-                } catch (error) {
-                    // Catch-all to prevent crashes
-                    console.error('Unexpected error in onresult handler:', error);
-                    // Don't show error to user for result processing issues
-                    // as it's not critical - just log it
-                }
-            };
-
-            /**
-             * Fired when recognition encounters an error
-             * Enhanced error handling with specific error codes and Safari advice
-             * @param {SpeechRecognitionErrorEvent} event - The error event
-             */
-            recognition.onerror = function(event) {
-                // Safely extract error code - prevent crashes if event is malformed
-                let errorCode = 'unknown';
-                let errorMessage = 'An error occurred.';
-                
-                try {
-                    errorCode = event.error || 'unknown';
-                } catch (e) {
-                    console.error('Error extracting error code:', e);
-                    errorCode = 'unknown';
-                }
-                
-                // Provide user-friendly error messages with specific error codes
-                switch(errorCode) {
-                    case 'no-speech':
-                        errorMessage = 'No speech detected. Please speak clearly and try again.';
-                        break;
-                    case 'audio-capture':
-                        errorMessage = 'Microphone not found. Please check that your microphone is connected and working.';
-                        break;
-                    case 'not-allowed':
-                        errorMessage = 'Microphone permission denied. Please allow microphone access in your browser settings and try again.';
-                        break;
-                    case 'service-not-allowed':
-                        // Common on iOS Safari when language is not supported or service unavailable
-                        errorMessage = 'Speech recognition service not available. This may happen if the selected language is not supported on your device.';
-                        if (isSafari() || isIOSSafari()) {
-                            if (currentLanguage === 'ur-PK') {
-                                errorMessage += ' Urdu (ur-PK) may not be fully supported on iOS Safari. Try switching to English (en-US) or ensure your iOS device has Urdu language support enabled in Settings.';
-                            } else {
-                                errorMessage += ' Try switching to English (en-US) or refresh the page.';
-                            }
-                        }
-                        break;
-                    case 'network':
-                        errorMessage = 'Network error. Please check your internet connection and try again.';
-                        break;
-                    case 'bad-grammar':
-                        errorMessage = 'Grammar error in speech recognition configuration.';
-                        break;
-                    case 'language-not-supported':
-                        errorMessage = 'The selected language is not supported. Please try a different language.';
-                        break;
-                    case 'aborted':
-                        // User stopped manually - not really an error, don't show error message
-                        return;
-                    default:
-                        errorMessage = `An unexpected error occurred: ${errorCode}`;
-                }
-                
-                // Display error with code and Safari advice
-                showError(errorMessage, errorCode);
-                
-                // Safely reset UI - wrap in try-catch to prevent crashes
-                try {
-                    resetUI();
-                } catch (e) {
-                    console.error('Error resetting UI:', e);
-                    // Try to at least clear the recognition reference
-                    try {
-                        currentRecognition = null;
-                    } catch (e2) {
-                        console.error('Critical error clearing recognition:', e2);
-                    }
-                }
-            };
-
-            /**
-             * Fired when recognition ends (naturally or manually)
-             * Enhanced with error handling to prevent crashes
-             */
-            recognition.onend = function() {
-                try {
-                    resetUI();
-                } catch (error) {
-                    console.error('Error in onend handler:', error);
-                    // Try to at least clear the recognition reference
-                    try {
-                        currentRecognition = null;
-                    } catch (e) {
-                        console.error('Critical error clearing recognition in onend:', e);
-                    }
-                }
-            };
-
-            return recognition;
-            } catch (error) {
-                // Catch-all for any unexpected errors during object creation
-                console.error('Unexpected error in createRecognitionObject:', error);
-                showError('Failed to create speech recognition object. Please refresh the page and try again.', 'unexpected-creation-error');
-                return null;
-            }
-        }
-
-        // ============================================
-        // UI State Management
-        // ============================================
-        
-        // Store the current recognition instance (only while active)
-        // This is set to null when recognition ends or is stopped
-        // IMPORTANT: We create a NEW object each time startRecognition() is called
-        let currentRecognition = null;
-        
-        /**
-         * Disables language toggle buttons
-         * Called when recognition starts to prevent language changes mid-session
-         * This is critical for iOS Safari compatibility
-         */
-        function disableLanguageToggle() {
-            try {
-                langEnBtn.disabled = true;
-                langUrBtn.disabled = true;
-            } catch (error) {
-                console.error('Error disabling language toggle:', error);
-            }
-        }
-
-        /**
-         * Enables language toggle buttons
-         * Called when recognition ends or errors occur
-         */
-        function enableLanguageToggle() {
-            try {
-                langEnBtn.disabled = false;
-                langUrBtn.disabled = false;
-            } catch (error) {
-                console.error('Error enabling language toggle:', error);
-            }
-        }
-        
-        /**
-         * Resets the UI to the initial state
-         * Enhanced with error handling to prevent crashes
-         */
-        function resetUI() {
-            try {
-                statusDiv.textContent = 'Ready to start';
-                statusDiv.className = 'status idle';
-                startBtn.disabled = false;
-                stopBtn.disabled = true;
-                // Re-enable language toggle when recognition ends
-                enableLanguageToggle();
-                // Clear the recognition reference when UI resets
-                // This ensures we create a new object next time
-                currentRecognition = null;
-            } catch (error) {
-                // If UI reset fails, at least try to clear the recognition reference
-                console.error('Error resetting UI:', error);
-                try {
-                    currentRecognition = null;
-                    enableLanguageToggle(); // Try to re-enable toggle even on error
-                } catch (e) {
-                    console.error('Critical error clearing recognition reference:', e);
-                }
-            }
-        }
-
-        // ============================================
-        // Button Event Handlers
-        // ============================================
-        
-        /**
-         * Starts speech recognition
-         * 
-         * CRITICAL FOR iOS SAFARI:
-         * - Creates a NEW SpeechRecognition object every time (never reuses)
-         * - Sets the language BEFORE calling start() (required for iOS)
-         * - Calls start() immediately in the click handler (no async/delay)
-         * 
-         * This approach is required because iOS Safari has strict limitations:
-         * 1. Recognition objects can only be started once per instance
-         * 2. Language must be set during object creation, not modified after
-         * 3. Objects cannot be reused after they end - must create fresh ones
-         */
-        function startRecognition() {
-            // Wrap entire function in try-catch to prevent crashes
-            try {
-                hideError();
-                
-                // Check browser support first
-                if (!checkBrowserSupport()) {
-                    return;
-                }
-
-                // CRITICAL FOR iOS: Create a NEW recognition object every time
-                // Never reuse an existing object - iOS Safari will fail if we try
-                let recognition;
-                try {
-                    recognition = createRecognitionObject();
-                } catch (e) {
-                    console.error('Error creating recognition object:', e);
-                    showError('Failed to create speech recognition object. Please refresh the page and try again.', 'initialization-error');
-                    if (isSafari()) {
-                        showError('Failed to create speech recognition object. Please refresh the page and try again.', 'initialization-error');
-                    }
-                    return;
-                }
-
-                // Check if recognition object was created successfully
-                if (!recognition) {
-                    showError('Failed to initialize speech recognition. The browser may not support this feature.', 'initialization-failed');
-                    return;
-                }
-
-                // Store reference so stopRecognition() can access it
-                currentRecognition = recognition;
-
-                // Show info message if using Hindi workaround on iOS
-                if (isIOSSafari() && currentLanguage === 'ur-PK' && usingHindiWorkaround) {
-                    // Show a brief info message
-                    const originalStatus = statusDiv.textContent;
-                    statusDiv.textContent = '💡 Using Hindi recognition (converting to Urdu script)';
-                    statusDiv.className = 'status idle';
-                    
-                    // Clear after 3 seconds
-                    setTimeout(() => {
-                        if (statusDiv.textContent.includes('Using Hindi')) {
-                            statusDiv.textContent = originalStatus;
-                        }
-                    }, 3000);
-                }
-
-                // CRITICAL FOR iOS: Call start() immediately, synchronously
-                // No async/await, no setTimeout, no delays
-                // iOS Safari requires start() to be called directly in the event handler
-                try {
-                    recognition.start();
-                } catch (error) {
-                    // Safely extract error information
-                    let errorName = 'UnknownError';
-                    let errorMessage = 'Unknown error';
-                    
-                    try {
-                        errorName = error.name || 'UnknownError';
-                        errorMessage = error.message || 'Unknown error occurred';
-                    } catch (e) {
-                        console.error('Error extracting error details:', e);
-                    }
-                    
-                    // Handle specific error types with error codes
-                    if (errorName === 'InvalidStateError') {
-                        showError('Speech recognition is already running or was not properly stopped. Please wait a moment and try again.', 'invalid-state');
-                    } else if (errorName === 'NotAllowedError' || errorName === 'SecurityError') {
-                        showError('Microphone access denied. Please allow microphone permissions and refresh the page.', 'not-allowed');
-                    } else {
-                        showError(`Failed to start recognition: ${errorMessage}`, errorName.toLowerCase().replace('error', ''));
-                    }
-                    
-                    // Clear reference on error
-                    currentRecognition = null;
-                    
-                    // Safely reset UI
-                    try {
-                        resetUI();
-                    } catch (e) {
-                        console.error('Error resetting UI after start error:', e);
-                    }
-                }
-            } catch (error) {
-                // Catch-all for any unexpected errors - prevent page crash
-                console.error('Unexpected error in startRecognition:', error);
-                showError('An unexpected error occurred. Please refresh the page and try again.', 'unexpected-error');
-                
-                // Try to reset state
-                try {
-                    currentRecognition = null;
-                    resetUI();
-                } catch (e) {
-                    console.error('Critical error during error recovery:', e);
-                }
-            }
-        }
-
-        /**
-         * Stops speech recognition
-         * After stopping, the recognition object is cleared and cannot be reused
-         * Enhanced with error handling to prevent crashes
-         */
-        function stopRecognition() {
-            try {
-                if (currentRecognition) {
-                    try {
-                        currentRecognition.stop();
-                    } catch (error) {
-                        // If stop() fails, log but don't crash
-                        console.warn('Error stopping recognition:', error);
-                        // Still try to reset UI
-                    }
-                    // Note: currentRecognition will be set to null in resetUI()
-                    // which is called by the onend event handler
-                }
-                resetUI();
-            } catch (error) {
-                // Catch-all to prevent crashes
-                console.error('Unexpected error in stopRecognition:', error);
-                // Try to at least clear the reference
-                try {
-                    currentRecognition = null;
-                    resetUI();
-                } catch (e) {
-                    console.error('Critical error during stop recovery:', e);
-                }
-            }
-        }
-
-        // ============================================
-        // Transliteration: Hindi to Urdu Script
-        // ============================================
-        
-        /**
-         * Converts Hindi (Devanagari script) text to Urdu (Nastaliq/Arabic script)
-         * This function transliterates Devanagari characters to their Urdu equivalents
-         * Used as a workaround on iOS where Urdu speech recognition is not supported
-         * 
-         * @param {string} hindiText - Text in Hindi/Devanagari script
-         * @returns {string} Text converted to Urdu/Nastaliq script
-         */
-        function convertHindiToUrdu(hindiText) {
-            if (!hindiText || !hindiText.trim()) {
-                return hindiText;
-            }
-            
-            // Comprehensive Devanagari to Urdu/Arabic character mapping
-            // Maps Hindi consonants, vowels, and matras to Urdu equivalents
-            const devanagariToUrdu = {
-                // Vowels (independent)
-                'अ': 'ا', 'आ': 'آ', 'इ': 'اِ', 'ई': 'اِی', 'उ': 'اُ', 'ऊ': 'اُو',
-                'ऋ': 'ر', 'ए': 'ے', 'ऐ': 'ے', 'ओ': 'و', 'औ': 'و',
-                
-                // Vowel signs (matras)
-                'ा': 'ا', 'ि': 'ِ', 'ी': 'ی', 'ु': 'ُ', 'ू': 'و', 
-                'े': 'ے', 'ै': 'ے', 'ो': 'و', 'ौ': 'و',
-                'ं': 'ں', 'ः': '', '्': '', '़': '',
-                
-                // Consonants
-                'क': 'ک', 'ख': 'کھ', 'ग': 'گ', 'घ': 'گھ', 'ङ': 'نگ',
-                'च': 'چ', 'छ': 'چھ', 'ज': 'ج', 'झ': 'جھ', 'ञ': 'نج',
-                'ट': 'ٹ', 'ठ': 'ٹھ', 'ड': 'ڈ', 'ढ': 'ڈھ', 'ण': 'ن',
-                'त': 'ت', 'थ': 'تھ', 'द': 'د', 'ध': 'دھ', 'न': 'ن',
-                'प': 'پ', 'फ': 'پھ', 'ब': 'ب', 'भ': 'بھ', 'म': 'م',
-                'य': 'ی', 'र': 'ر', 'ल': 'ل', 'व': 'و', 'श': 'ش',
-                'ष': 'ش', 'स': 'س', 'ह': 'ہ', 'क्ष': 'کش', 'त्र': 'تر', 'ज्ञ': 'ج',
-                
-                // Numbers
-                '०': '۰', '१': '۱', '२': '۲', '३': '۳', '४': '۴',
-                '५': '۵', '६': '۶', '७': '۷', '८': '۸', '९': '۹',
-            };
-            
-            // Common word mappings for better accuracy
-            const wordMappings = {
-                'है': 'ہے', 'हो': 'ہو', 'में': 'میں', 'से': 'سے', 'को': 'کو',
-                'का': 'کا', 'की': 'کی', 'के': 'کے', 'और': 'اور', 'या': 'یا',
-                'नहीं': 'نہیں', 'हैं': 'ہیں', 'था': 'تھا', 'थी': 'تھی', 'थे': 'تھے',
-                'मैं': 'میں', 'तुम': 'تم', 'वह': 'وہ', 'यह': 'یہ', 'हम': 'ہم',
-                'क्या': 'کیا', 'कहाँ': 'کہاں', 'कब': 'کب', 'कैसे': 'کیسے', 'क्यों': 'کیوں'
-            };
-            
-            let urduText = hindiText;
-            
-            // First, try word-level mappings for common words
-            for (const [hindiWord, urduWord] of Object.entries(wordMappings)) {
-                const regex = new RegExp(hindiWord, 'g');
-                urduText = urduText.replace(regex, urduWord);
-            }
-            
-            // Then, convert remaining Devanagari characters
-            let result = '';
-            for (let i = 0; i < urduText.length; i++) {
-                const char = urduText[i];
-                
-                // Check if character is in mapping
-                if (devanagariToUrdu[char]) {
-                    result += devanagariToUrdu[char];
+                    // Update conversation history
+                    conversationHistory.push({
+                        user: message,
+                        ai: result.response
+                    });
                 } else {
-                    // Keep non-Devanagari characters as-is (spaces, punctuation, already converted Urdu, etc.)
-                    result += char;
+                    addMessage('Sorry, I encountered an error. Please try again.', 'ai');
                 }
+            } catch (error) {
+                console.error('Error sending message:', error);
+                removeMessage(typingId);
+                addMessage('Connection error. Please check your internet and try again.', 'ai');
             }
-            
-            // Post-processing: Clean up common issues
-            result = result.replace(/\s+/g, ' '); // Normalize spaces
-            result = result.replace(/ا\s+ی/g, 'ای'); // Fix spacing issues
-            result = result.replace(/ا\s+و/g, 'او');
-            
-            return result.trim();
-        }
-        
-        // ============================================
-        // Language Toggle
-        // ============================================
-        
-        /**
-         * Changes the recognition language
-         * Note: The language is applied when creating a NEW recognition object,
-         * not by modifying an existing one. This ensures iOS Safari compatibility.
-         * 
-         * @param {string} lang - Language code (e.g., 'en-US' or 'ur-PK')
-         */
-        function changeLanguage(lang) {
-            currentLanguage = lang;
-            
-            // Update button states
-            if (lang === 'en-US') {
-                langEnBtn.classList.add('active');
-                langUrBtn.classList.remove('active');
-                // Set LTR for English
-                transcriptionDiv.removeAttribute('dir');
-                transcriptionDiv.classList.remove('urdu-text');
-                // Update HTML lang attribute for better accessibility
-                document.documentElement.lang = 'en';
-            } else {
-                langUrBtn.classList.add('active');
-                langEnBtn.classList.remove('active');
-                // Set RTL for Urdu to ensure proper rendering on iOS
-                transcriptionDiv.setAttribute('dir', 'rtl');
-                transcriptionDiv.classList.add('urdu-text');
-                // Update HTML lang attribute for better accessibility and iOS support
-                document.documentElement.lang = 'ur';
-            }
-
-            // Note: We don't update an existing recognition object's language
-            // because we create a NEW object each time startRecognition() is called.
-            // The language will be applied when the next recognition object is created.
-            // This approach is required for iOS Safari compatibility.
-
-            // Clear transcription when language changes
-            transcriptionDiv.textContent = '';
-            hideError();
         }
 
-        // ============================================
+        // Add message to chat
+        function addMessage(text, type, isTyping = false) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            if (currentLanguage === 'ur-PK') {
+                messageDiv.setAttribute('dir', 'rtl');
+            }
+            
+            const bubble = document.createElement('div');
+            bubble.className = 'message-bubble';
+            bubble.textContent = text;
+            
+            messageDiv.appendChild(bubble);
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+
+            return isTyping ? messageDiv : null;
+        }
+
+        function removeMessage(messageDiv) {
+            if (messageDiv) messageDiv.remove();
+        }
+
+        // Speech Recognition
+        function startSpeechRecognition() {
+            if (!SpeechRecognition) {
+                alert('Speech recognition not supported in your browser.');
+                return;
+            }
+
+            const recognition = new SpeechRecognition();
+            recognition.lang = currentLanguage === 'ur-PK' ? 'hi-IN' : currentLanguage; // Use Hindi for Urdu on iOS
+            recognition.continuous = false;
+            recognition.interimResults = true;
+
+            recognition.onstart = () => {
+                isRecording = true;
+                micBtn.classList.add('recording');
+                statusDiv.textContent = 'Listening...';
+                statusDiv.classList.add('recording');
+            };
+
+            recognition.onresult = (event) => {
+                let transcript = '';
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    transcript += event.results[i][0].transcript;
+                }
+                messageInput.value = transcript;
+            };
+
+            recognition.onend = () => {
+                isRecording = false;
+                micBtn.classList.remove('recording');
+                statusDiv.textContent = 'Ready to chat';
+                statusDiv.classList.remove('recording');
+            };
+
+            recognition.onerror = (event) => {
+                console.error('Recognition error:', event.error);
+                isRecording = false;
+                micBtn.classList.remove('recording');
+                statusDiv.textContent = 'Error: ' + event.error;
+            };
+
+            recognition.start();
+            currentRecognition = recognition;
+        }
+
         // Event Listeners
-        // ============================================
-        
-        // Start button click handler
-        startBtn.addEventListener('click', startRecognition);
-        
-        // Stop button click handler
-        stopBtn.addEventListener('click', stopRecognition);
-        
-        // Language button handlers
-        langEnBtn.addEventListener('click', function() {
-            changeLanguage('en-US');
-        });
-        
-        langUrBtn.addEventListener('click', function() {
-            changeLanguage('ur-PK');
+        sendBtn.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
         });
 
-        // ============================================
-        // Keyboard Accessibility
-        // ============================================
-        
-        // Allow Enter key to trigger buttons
-        startBtn.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                startRecognition();
+        micBtn.addEventListener('click', () => {
+            if (isRecording && currentRecognition) {
+                currentRecognition.stop();
+            } else {
+                startSpeechRecognition();
             }
         });
 
-        stopBtn.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                stopRecognition();
-            }
-        });
-
-        // ============================================
-        // Initialization on Page Load
-        // ============================================
-        
-        // Check browser support when page loads
-        window.addEventListener('load', function() {
-            checkBrowserSupport();
-            
-            // Show iOS Safari hint if on iOS Safari
-            if (isIOSSafari() && iosHintDiv) {
-                try {
-                    iosHintDiv.style.display = 'block';
-                } catch (e) {
-                    console.warn('Could not show iOS hint:', e);
+        // Load conversation history on page load
+        async function loadHistory() {
+            try {
+                const response = await fetch(`${WORKER_URL}/conversations?sessionId=${sessionId}`);
+                const result = await response.json();
+                
+                if (result.success && result.conversations.length > 0) {
+                    // Clear initial message
+                    chatContainer.innerHTML = '';
+                    
+                    // Load conversations
+                    result.conversations.reverse().forEach(conv => {
+                        addMessage(conv.user_message, 'user');
+                        addMessage(conv.ai_response, 'ai');
+                        conversationHistory.push({
+                            user: conv.user_message,
+                            ai: conv.ai_response
+                        });
+                    });
                 }
+            } catch (error) {
+                console.error('Error loading history:', error);
             }
-        });
+        }
+
+        // Initialize
+        loadHistory();
     </script>
 </body>
 </html>
+
